@@ -1,0 +1,498 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { DataSource, Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+
+import { paginate } from '../../common/dto/pagination-query.dto';
+import { MailService } from '../mail/mail.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { User } from './entities/user.entity';
+import { EmailVerificationToken } from './entities/email-verification-token.entity';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { UserProfile } from './entities/user-profile.entity';
+
+const SALT_ROUNDS = 10;
+const VERIFICATION_TOKEN_HOURS = 24;
+const PASSWORD_RESET_TOKEN_HOURS = 1;
+const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+@Injectable()
+export class AuthService {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(EmailVerificationToken)
+    private readonly verificationTokenRepository: Repository<EmailVerificationToken>,
+    @InjectRepository(PasswordResetToken)
+    private readonly passwordResetTokenRepository: Repository<PasswordResetToken>,
+    @InjectRepository(UserProfile)
+    private readonly userProfileRepository: Repository<UserProfile>,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly mailService: MailService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async register(dto: RegisterDto) {
+    const existing = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (existing) {
+      throw new ConflictException('Email already in use');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+
+    const user = await this.dataSource.transaction(async (manager) => {
+      const newUser = manager.create(User, {
+        email: dto.email,
+        passwordHash,
+      });
+      const savedUser = await manager.save(newUser);
+
+      const profile = manager.create(UserProfile, {
+        userId: savedUser.id,
+      });
+      await manager.save(profile);
+
+      const token = uuidv4();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + VERIFICATION_TOKEN_HOURS);
+
+      const verificationToken = manager.create(EmailVerificationToken, {
+        userId: savedUser.id,
+        token,
+        expiresAt,
+      });
+      await manager.save(verificationToken);
+
+      await this.mailService.sendVerificationEmail(savedUser.email, token);
+
+      return savedUser;
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      message: 'Check your email to verify your account',
+    };
+  }
+
+  async verifyEmail(token: string) {
+    const verificationToken = await this.verificationTokenRepository.findOne({
+      where: { token },
+    });
+
+    if (!verificationToken) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    if (verificationToken.usedAt) {
+      throw new BadRequestException('Verification token has already been used');
+    }
+
+    if (verificationToken.expiresAt < new Date()) {
+      throw new BadRequestException('Verification token has expired');
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(User, verificationToken.userId, {
+        emailVerifiedAt: new Date(),
+      });
+
+      await manager.update(EmailVerificationToken, verificationToken.id, {
+        usedAt: new Date(),
+      });
+    });
+
+    return { message: 'Email verified successfully' };
+  }
+
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      return { message: 'If an account exists with this email, a verification link has been sent' };
+    }
+
+    if (user.emailVerifiedAt) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    await this.verificationTokenRepository
+      .createQueryBuilder()
+      .delete()
+      .where('user_id = :userId', { userId: user.id })
+      .andWhere('used_at IS NULL')
+      .execute();
+
+    const token = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + VERIFICATION_TOKEN_HOURS);
+
+    const verificationToken = this.verificationTokenRepository.create({
+      userId: user.id,
+      token,
+      expiresAt,
+    });
+    await this.verificationTokenRepository.save(verificationToken);
+
+    await this.mailService.sendVerificationEmail(user.email, token);
+
+    return { message: 'If an account exists with this email, a verification link has been sent' };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      return {
+        message:
+          'If an account exists with this email, a password reset link has been sent',
+      };
+    }
+
+    if (!user.emailVerifiedAt) {
+      return {
+        message:
+          'If an account exists with this email, a password reset link has been sent',
+      };
+    }
+
+    await this.passwordResetTokenRepository
+      .createQueryBuilder()
+      .delete()
+      .where('user_id = :userId', { userId: user.id })
+      .andWhere('used_at IS NULL')
+      .execute();
+
+    const token = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + PASSWORD_RESET_TOKEN_HOURS);
+
+    const resetToken = this.passwordResetTokenRepository.create({
+      userId: user.id,
+      token,
+      expiresAt,
+    });
+    await this.passwordResetTokenRepository.save(resetToken);
+
+    await this.mailService.sendPasswordResetEmail(user.email, token);
+
+    return {
+      message:
+        'If an account exists with this email, a password reset link has been sent',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const resetToken = await this.passwordResetTokenRepository.findOne({
+      where: { token: dto.token },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (resetToken.usedAt) {
+      throw new BadRequestException('This reset link has already been used');
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      throw new BadRequestException('This reset link has expired');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+
+    const user = await this.userRepository.findOne({
+      where: { id: resetToken.userId },
+    });
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(User, resetToken.userId, {
+        passwordHash,
+      });
+      await manager.update(PasswordResetToken, resetToken.id, {
+        usedAt: new Date(),
+      });
+    });
+
+    if (user) {
+      await this.mailService.sendPasswordChangedConfirmation(user.email);
+    }
+
+    return { message: 'Password has been reset successfully' };
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
+
+    if (!passwordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException(
+        'Please verify your email before logging in',
+      );
+    }
+
+    const accessToken = this.generateAccessToken(user);
+    const refreshToken = this.generateRefreshToken(user);
+
+    return {
+      accessToken,
+      refreshToken,
+      refreshCookieMaxAge: REFRESH_COOKIE_MAX_AGE_MS,
+      user: { id: user.id, email: user.email, emailVerifiedAt: user.emailVerifiedAt },
+    };
+  }
+
+  async refresh(refreshTokenValue: string) {
+    try {
+      const payload = this.jwtService.verify(refreshTokenValue, {
+        secret: this.configService.get<string>('jwt.refreshSecret'),
+      });
+
+      const user = await this.userRepository.findOne({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const accessToken = this.generateAccessToken(user);
+
+      return { accessToken };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  async getUserInfo(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const profile = await this.userProfileRepository.findOne({
+      where: { userId: user.id },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      emailVerifiedAt: user.emailVerifiedAt,
+      createdAt: user.createdAt,
+      profileId: profile?.id ?? null,
+    };
+  }
+
+  async getUserProfile(userId: string) {
+    const profile = await this.userProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      username: profile.username,
+      avatarUrl: profile.avatarUrl,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+    };
+  }
+
+  async checkUsernameAvailable(
+    username: string,
+    excludeUserId?: string,
+  ): Promise<{ available: boolean }> {
+    if (!username || username.length < 3 || username.length > 30) {
+      throw new BadRequestException(
+        'Username must be between 3 and 30 characters',
+      );
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      throw new BadRequestException(
+        'Username can only contain letters, numbers and underscores',
+      );
+    }
+
+    const qb = this.userProfileRepository
+      .createQueryBuilder('up')
+      .where('up.username = :username', { username });
+
+    if (excludeUserId) {
+      qb.andWhere('up.user_id != :excludeUserId', { excludeUserId });
+    }
+
+    const existing = await qb.getOne();
+    return { available: !existing };
+  }
+
+  async searchUsers(
+    q: string,
+    currentUserId: string,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    if (!q || q.trim().length < 2) {
+      throw new BadRequestException('Search query must be at least 2 characters');
+    }
+
+    const searchTerm = `%${q.trim()}%`;
+
+    const qb = this.userRepository
+      .createQueryBuilder('u')
+      .innerJoin('user_profiles', 'up', 'up.user_id = u.id')
+      .where('u.email_verified_at IS NOT NULL')
+      .andWhere('u.id != :currentUserId', { currentUserId })
+      .andWhere('(u.email ILIKE :searchTerm OR up.username ILIKE :searchTerm)', {
+        searchTerm,
+      })
+      .select([
+        'u.id',
+        'u.email',
+        'up.first_name',
+        'up.last_name',
+        'up.username',
+      ])
+      .orderBy('u.email', 'ASC');
+
+    const [rawUsers, total] = await Promise.all([
+      qb
+        .clone()
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getRawMany(),
+      qb.getCount(),
+    ]);
+
+    const data = rawUsers.map((row: Record<string, unknown>) => ({
+      id: row.u_id,
+      email: row.u_email,
+      firstName: row.up_first_name ?? null,
+      lastName: row.up_last_name ?? null,
+      username: row.up_username ?? null,
+    }));
+
+    return paginate(data, total, page, limit);
+  }
+
+  async getPublicProfile(userId: string) {
+    const profile = await this.userProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      username: profile.username,
+      avatarUrl: profile.avatarUrl,
+    };
+  }
+
+  async updateUserProfile(
+    userId: string,
+    data: { firstName?: string; lastName?: string; username?: string; avatarUrl?: string },
+  ) {
+    const profile = await this.userProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (data.username && data.username !== profile.username) {
+      const existing = await this.userProfileRepository.findOne({
+        where: { username: data.username },
+      });
+
+      if (existing) {
+        throw new ConflictException('Username already taken');
+      }
+    }
+
+    if (data.firstName !== undefined) profile.firstName = data.firstName;
+    if (data.lastName !== undefined) profile.lastName = data.lastName;
+    if (data.username !== undefined) profile.username = data.username;
+    if (data.avatarUrl !== undefined) profile.avatarUrl = data.avatarUrl;
+
+    const saved = await this.userProfileRepository.save(profile);
+
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      firstName: saved.firstName,
+      lastName: saved.lastName,
+      username: saved.username,
+      avatarUrl: saved.avatarUrl,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
+  }
+
+  private generateAccessToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id, email: user.email },
+      {
+        secret: this.configService.getOrThrow<string>('jwt.accessSecret'),
+        expiresIn: this.configService.getOrThrow<string>('jwt.accessExpiration') as any,
+      },
+    );
+  }
+
+  private generateRefreshToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id },
+      {
+        secret: this.configService.getOrThrow<string>('jwt.refreshSecret'),
+        expiresIn: this.configService.getOrThrow<string>('jwt.refreshExpiration') as any,
+      },
+    );
+  }
+}

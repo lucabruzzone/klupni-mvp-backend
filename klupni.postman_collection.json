@@ -1,0 +1,871 @@
+{
+  "info": {
+    "name": "Klupni MVP",
+    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: set manually after listing activity details",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activityId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "participationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "externalContactId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invitationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invitationToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Register a new user. Creates the user, an empty user_profile, and sends a verification email.\n\nResponds 201 with `{ id, email, message }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email?token=PASTE_TOKEN_HERE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-email"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "PASTE_TOKEN_HERE",
+                  "description": "Token received in the verification email"
+                }
+              ]
+            },
+            "description": "Verify the user's email using the token received by email. The token is valid for 24 hours and can only be used once.\n\nResponds 200 with `{ message }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "resend-verification"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Resend the verification email. **Public** endpoint.\n\nRequest: `{ email: string }`\n\n- If the email is not registered: responds 200 with generic message (no email enumeration)\n- If the email is already verified: responds 400\n- Otherwise: invalidates previous unused tokens, creates new one, sends email, responds 200\n\nResponds 200 with `{ message }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Request a password reset email. **Public** endpoint.\n\nRequest: `{ email: string }`\n\n- Always responds 200 with generic message (no email enumeration)\n- Only sends email if account exists and is verified\n- Token expires in 1 hour\n- Link points to FRONTEND_URL/reset-password?token=xxx"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"PASTE_TOKEN_FROM_EMAIL\",\n  \"password\": \"NewPassword123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Reset password using the token from the email. **Public** endpoint.\n\nRequest: `{ token: string, password: string }` (password min 8 chars)\n\nResponds 200 with `{ message: 'Password has been reset successfully' }`.\nResponds 400 if token is invalid, expired or already used."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.accessToken);",
+                  "  console.log('accessToken saved to collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Login with email and password. The email must be verified first.\n\nResponds 200 with `{ accessToken, user }` and sets an HttpOnly cookie `refresh_token`.\n\nThe test script automatically saves `accessToken` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.accessToken);",
+                  "  console.log('accessToken refreshed and saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Generate a new access token using the `refresh_token` HttpOnly cookie. The cookie must be present (set automatically by Postman after login if cookie handling is enabled).\n\nResponds 200 with `{ accessToken }`.\n\nThe test script automatically saves the new `accessToken` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout the authenticated user. Clears the `refresh_token` cookie.\n\nRequires a valid `Authorization: Bearer <accessToken>` header.\n\nResponds 200 with `{ message }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Check Username",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/check-username?username=juanperez",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "check-username"],
+              "query": [
+                { "key": "username", "value": "juanperez", "description": "Username to check (3-30 chars, alphanumeric + underscore)" },
+                { "key": "excludeUserId", "value": "", "description": "Optional: exclude this user ID (e.g. when updating own profile)" }
+              ]
+            },
+            "description": "Check if a username is available. **Public** endpoint.\n\nQuery params:\n- `username` (required): 3-30 chars, letters, numbers, underscores only\n- `excludeUserId` (optional): when updating profile, pass current user ID to exclude own username\n\nResponds 200 with `{ available: boolean }`.\nResponds 400 if username format is invalid."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/search?q=maria&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "search"],
+              "query": [
+                { "key": "q", "value": "maria", "description": "Search by email or username (min 2 chars)" },
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "Search users by email or username. For inviting users to activities. Requires auth. Paginated.\n\n**Query params:**\n- `q` (required): search term, min 2 characters. Matches email or username (partial, case-insensitive).\n- `page` (optional): page number, default 1.\n- `limit` (optional): items per page, default 10, max 100.\n\nResponds 200 with `{ data: [{ id, email, firstName, lastName, username }], meta: { total, page, limit, totalPages } }`.\nExcludes unverified users and the current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Get the authenticated user's account information (without profile details).\n\nResponds 200 with `{ id, email, emailVerifiedAt, createdAt, profileId }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "profile"]
+            },
+            "description": "Get the authenticated user's profile details.\n\nResponds 200 with `{ id, userId, firstName, lastName, username, avatarUrl, createdAt, updatedAt }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "profile"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Juan\",\n  \"lastName\": \"Pérez\",\n  \"username\": \"juanperez\",\n  \"avatarUrl\": \"https://example.com/avatar.jpg\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update the authenticated user's profile (used during onboarding or later).\n\nAll fields are optional:\n- `firstName` (string, 1-50 chars)\n- `lastName` (string, 1-50 chars)\n- `username` (string, 3-30 chars, alphanumeric + underscores, must be unique)\n- `avatarUrl` (valid URL, max 500 chars)\n\nIf `username` is taken, responds 409.\n\nResponds 200 with the updated profile `{ id, userId, firstName, lastName, username, avatarUrl, createdAt, updatedAt }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/USER_UUID_HERE/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "USER_UUID_HERE", "profile"]
+            },
+            "description": "Get the public profile of any user by their user ID.\n\nResponds 200 with `{ id, userId, firstName, lastName, username, avatarUrl }`.\n\nDoes not include timestamps (unlike your own profile endpoint)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Activities",
+      "item": [
+        {
+          "name": "Create Activity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) {",
+                  "  pm.collectionVariables.set('activityId', res.id);",
+                  "  console.log('activityId saved:', res.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Fútbol 5 el sábado\",\n  \"description\": \"Partido amistoso en la cancha del barrio\",\n  \"startAt\": \"2026-03-15T18:00:00.000Z\",\n  \"endAt\": \"2026-03-15T20:00:00.000Z\",\n  \"sportName\": \"Fútbol\",\n  \"locationText\": \"Cancha Municipal, Av. Principal 123\",\n  \"maxParticipants\": 10,\n  \"minParticipants\": 6\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Create a new activity. The authenticated user becomes the host automatically (role: 'host' in activity_participations).\n\nThe activity is created together with its `activity_open` record in a single transaction.\n\n**Validations:**\n- `title`: required, max 100 chars\n- `startAt`: required, must be a future date (ISO 8601)\n- `endAt`: optional, must be after `startAt`\n- `maxParticipants`: required, 2–100\n- `minParticipants`: required, min 1, must be ≤ `maxParticipants`\n\nResponds 201 with the full activity including `activityOpen`.\n\nThe test script automatically saves `activityId` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "List Activities (all)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities?type=all&time=upcoming&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities"],
+              "query": [
+                { "key": "type", "value": "all", "description": "Filter: 'all' | 'created' | 'participating'. Default: 'all'" },
+                { "key": "time", "value": "upcoming", "description": "Filter: 'upcoming' | 'past' | 'all'. Default: 'upcoming'" },
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "List activities relevant to the authenticated user.\n\n**Query params:**\n- `type`: 'all' (default) | 'created' | 'participating'\n- `time`: 'upcoming' (default) | 'past' | 'all'\n\nBy default only upcoming activities are shown (startAt >= now), ordered by nearest first.\nWith `time=past`, shows past activities ordered by most recent first.\nWith `time=all`, shows all activities ordered by startAt ASC.\n\nEach item includes a `participantCount` with the number of active participants.\n\nResponds 200 with an array."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.participants && res.participants.length > 0) {",
+                  "  const nonHost = res.participants.find(p => p.role !== 'host');",
+                  "  if (nonHost) {",
+                  "    pm.collectionVariables.set('participationId', nonHost.id);",
+                  "    console.log('participationId (non-host) saved:', nonHost.id);",
+                  "  } else {",
+                  "    pm.collectionVariables.set('participationId', res.participants[0].id);",
+                  "    console.log('participationId saved:', res.participants[0].id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}"]
+            },
+            "description": "Get full detail of a single activity by ID.\n\nIncludes:\n- `activityOpen` data (sport, location, min/max participants)\n- `participants` list with role, joinedAt, and user info (email) or external contact info\n\nResponds 404 if the activity does not exist or is soft-deleted.\n\nThe test script saves the first non-host `participationId` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "List Participants (all)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participants?status=all&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participants"],
+              "query": [
+                { "key": "status", "value": "all", "description": "Filter: 'confirmed' | 'pending' | 'all'. Default: 'all'" },
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "List participants of an activity with minimal info (for UI cards/avatars).\n\n**Query params:**\n- `status=all` (default): confirmed participants + pending invitations\n- `status=confirmed`: only active participants\n- `status=pending`: only pending invitations\n\nEach item includes: `type` (user/external_contact/free/invited), `displayName`, `avatarUrl`, `role`, `status`, `participationId`, `invitationId`, `userId`, `externalContactId`.\n\nUse `userId` or `externalContactId` from the response to fetch detailed profiles via the dedicated endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Activity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Fútbol 5 actualizado\",\n  \"locationText\": \"Nueva cancha, Calle Falsa 456\",\n  \"maxParticipants\": 12\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update an existing activity. Only the host can do this (403 otherwise).\n\nAll fields are optional. Only the fields sent will be updated. The same validations from creation apply.\n\nResponds 200 with the updated activity including `activityOpen`."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Activity",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}"]
+            },
+            "description": "Soft-delete an activity (sets `deleted_at` on both `activities` and `activity_open`). Only the host can do this (403 otherwise).\n\nResponds 200 with `{ message: 'Activity deleted successfully' }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Participations",
+      "item": [
+        {
+          "name": "Add Free Participant",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participations/free",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participations", "free"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alias\": \"Carlos (amigo de Juan)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add a free participant to the activity. Host-only.\n\nA free participant has no linked user account or external contact — they only exist within this activity.\n\nRequired fields:\n- `alias` (string, 1-100 chars): a display name to identify the participant\n\nFree participants can only have the role `participant` and cannot be made host.\n\nChecks:\n- Caller must be host\n- Activity must not exceed `maxParticipants`\n\nResponds 201 with `{ id, activityId, alias, role, status, joinedAt, createdAt }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Participation Role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participations/{{participationId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participations", "{{participationId}}", "role"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"host\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Change the role of an active participant. Only a host can do this.\n\n- Cannot change your own role (400)\n- External contacts cannot be assigned the `host` role (400)\n- Multiple hosts are allowed\n- Valid values: `'host'` or `'participant'`\n\nResponds 200 with the updated participation."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Participant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participations/{{participationId}}/remove",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participations", "{{participationId}}", "remove"]
+            },
+            "description": "Remove an active participant from the activity. Only a host can do this.\n\n- Cannot remove another host (400 — demote them to participant first)\n- Sets `status = 'removed'` on the participation row (no hard delete)\n\nResponds 200 with `{ message: 'Participant removed successfully' }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Activity",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participations/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participations", "me"]
+            },
+            "description": "Leave an activity as the authenticated user.\n\n- If the user is not an active participant: 404\n- If the user is the **only** host: 400 — must assign another host first\n- Sets `status = 'left'` on the participation row\n\nResponds 200 with `{ message: 'You have left the activity' }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "External Contacts",
+      "item": [
+        {
+          "name": "List External Contacts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/external-contacts?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "external-contacts"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "List all external contacts owned by the authenticated user. Paginated.\n\nResponds 200 with `{ data: [...], meta: { total, page, limit, totalPages } }`.\n\nExcludes soft-deleted contacts."
+          },
+          "response": []
+        },
+        {
+          "name": "Create External Contact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('externalContactId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/external-contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "external-contacts"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alias\": \"Juan Pérez\",\n  \"email\": \"juan@example.com\",\n  \"phoneNumber\": \"+56912345678\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Create a standalone external contact (not tied to any activity).\n\nRequired fields:\n- `alias` (string, 1-100 chars)\n\nOptional fields:\n- `email` (valid email)\n- `phoneNumber` (string, max 30 chars)\n\nResponds 201 with `{ id, alias, email, phoneNumber, createdAt }`.\n\nThe test script saves `externalContactId` to the collection variable for use in invitation endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Update External Contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/external-contacts/{{externalContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "external-contacts", "{{externalContactId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alias\": \"Juan P. (actualizado)\",\n  \"email\": \"juan.nuevo@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update an external contact that belongs to the authenticated user.\n\nAll fields are optional:\n- `alias` (string, 1-100 chars)\n- `email` (valid email)\n- `phoneNumber` (string, max 30 chars)\n\nResponds 200 with `{ id, alias, email, phoneNumber, createdAt, updatedAt }`.\nResponds 404 if the contact does not exist or does not belong to you."
+          },
+          "response": []
+        },
+        {
+          "name": "Get External Contact",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/external-contacts/{{externalContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "external-contacts", "{{externalContactId}}"]
+            },
+            "description": "Get detailed information of a specific external contact.\n\nResponds 200 with `{ id, alias, email, phoneNumber, createdAt, updatedAt }`.\n\nResponds 404 if the contact does not exist."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete External Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/external-contacts/{{externalContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "external-contacts", "{{externalContactId}}"]
+            },
+            "description": "Soft-delete an external contact. Only the owner can delete it.\n\nResponds 200 with `{ message: 'External contact deleted successfully' }`.\nResponds 404 if the contact does not exist or does not belong to you."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Invitations",
+      "item": [
+        {
+          "name": "Send Invitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) {",
+                  "  pm.collectionVariables.set('invitationId', res.id);",
+                  "  console.log('invitationId saved:', res.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/invitations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "invitations"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_UUID_HERE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Invite a registered user or an external contact to the activity. Only the host can send invitations.\n\nExactly **one** of the following must be provided:\n- `userId`: UUID of a registered Klupni user\n- `externalContactId`: UUID of an external contact owned by the host (must have an email)\n\n**Checks performed:**\n- Activity must exist, not be deleted, and have status `open`\n- Active participants + pending invitations must be under `maxParticipants`\n- No duplicate pending invitation for the same target\n- The target must not already be an active participant\n- Cannot invite yourself\n- External contact must belong to the host and have an email\n\nSends an invitation email with an accept link. Token expires in 48 hours.\n\nResponds 201 with `{ id, email, userId, externalContactId, status, expiresAt }`.\n\nThe test script saves `invitationId` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Invitations (Batch)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/invitations/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "invitations", "batch"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\"USER_UUID_1\", \"USER_UUID_2\"],\n  \"externalContactIds\": [\"CONTACT_UUID_1\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Invite multiple users and/or external contacts at once. Only the host can send invitations.\n\n**Request body:**\n- `userIds` (optional): array of user UUIDs (max 50)\n- `externalContactIds` (optional): array of external contact UUIDs (max 50)\n- At least one array must be non-empty. Total recipients ≤ 50.\n\n**Response:** `{ created: [{ id, email, userId?, externalContactId?, status, expiresAt }], failed: [{ userId?, externalContactId?, reason }], message }`\n\nInvalid targets (already participating, pending invite, no email, etc.) are skipped and listed in `failed`."
+          },
+          "response": []
+        },
+        {
+          "name": "List Invitations By Activity",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/invitations?page=1&limit=10&status=all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "invitations"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" },
+                { "key": "status", "value": "all", "description": "Filter: pending | accepted | cancelled | all (default: all)" }
+              ]
+            },
+            "description": "List invitations for an activity. Only the host can view them. Paginated.\n\n**Query params:**\n- `status=all` (default): all invitations\n- `status=pending`: only pending invitations\n- `status=accepted`: only accepted invitations\n- `status=cancelled`: only cancelled invitations\n\nResponds 200 with `{ data: [...], meta: { total, page, limit, totalPages } }`."
+          },
+          "response": []
+        },
+        {
+          "name": "List Received Invitations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invitations/received?page=1&limit=10&status=all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "invitations", "received"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" },
+                { "key": "status", "value": "all", "description": "Filter: pending | accepted | past | expired | all (default: all)" }
+              ]
+            },
+            "description": "List invitations received by the authenticated user. Paginated.\n\n**Query params:**\n- `status=all` (default): all invitations\n- `status=pending`: only pending invitations\n- `status=accepted`: only accepted invitations\n- `status=past`: invitations for activities that already happened (history)\n- `status=expired`: only expired invitations\n\nResponds 200 with `{ data: [...], meta: { total, page, limit, totalPages } }`.\nEach item includes activity details and inviter info."
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Invitation (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/invitations/preview?token={{invitationToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "invitations", "preview"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{invitationToken}}",
+                  "description": "Invitation token from the email link."
+                }
+              ]
+            },
+            "description": "Preview invitation details without accepting. **Public** endpoint (no auth required).\n\nUse before showing the accept page: display activity title, date, location, inviter name, and whether the invitation can still be accepted.\n\nResponds 200 with:\n- `activity`: { id, title, startAt, endAt, locationText, sportName, status }\n- `inviter`: { displayName, email }\n- `status`: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired'\n- `expiresAt`: ISO date\n- `canAccept`: boolean (true only if pending, not expired, activity open)\n\nResponds 400 if token is invalid."
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Invitation (public)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/invitations/accept?token={{invitationToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "invitations", "accept"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{invitationToken}}",
+                  "description": "Invitation token from the email link. Copy from Mailtrap and paste in the invitationToken collection variable."
+                }
+              ]
+            },
+            "description": "Accept an invitation using the token from the email link. This is a **public** endpoint (no auth required).\n\n**Checks performed:**\n- Token must exist and be in `pending` status\n- Token must not be expired (auto-marks as `expired` if it is)\n- Activity must still be `open` with available spots\n\nOn success:\n- Creates a participation (role: `participant`, status: `active`)\n- Updates invitation to `accepted` with `respondedAt`\n- Sends a notification email to the host\n\nResponds 200 with `{ message, activity: { id, title, startAt, locationText } }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/invitations/{{invitationId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "invitations", "{{invitationId}}", "cancel"]
+            },
+            "description": "Cancel a pending invitation. Only the host can do this.\n\n- The invitation must be in `pending` status (400 otherwise)\n- Sets `status = 'cancelled'`\n\nResponds 200 with `{ message: 'Invitation cancelled' }`."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
