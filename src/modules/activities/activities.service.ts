@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from './utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -17,7 +13,9 @@ import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ListActivitiesQueryDto } from './dto/list-activities-query.dto';
 import { ListParticipantsQueryDto } from './dto/list-participants-query.dto';
+import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
+import { ApiException } from '../../common/exceptions/api.exception';
 
 @Injectable()
 export class ActivitiesService {
@@ -210,7 +208,7 @@ export class ActivitiesService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     const participations = await this.participationRepository.find({
@@ -261,7 +259,7 @@ export class ActivitiesService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     assertActivityActive(activity);
@@ -303,7 +301,7 @@ export class ActivitiesService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     assertActivityActive(activity);
@@ -324,7 +322,7 @@ export class ActivitiesService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     const filter = query.status ?? 'all';
@@ -475,9 +473,7 @@ export class ActivitiesService {
     });
 
     if (!participation) {
-      throw new ForbiddenException(
-        'You do not have permission to modify this activity',
-      );
+      throw new ApiException(ApiCodes.ACTIVITY_MODIFY_FORBIDDEN, HttpStatus.FORBIDDEN);
     }
   }
 

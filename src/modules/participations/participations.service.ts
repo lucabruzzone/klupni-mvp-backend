@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from '../../common/utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,6 +7,8 @@ import { User } from '../auth/entities/user.entity';
 import { Activity } from '../activities/entities/activity.entity';
 import { ActivityOpen } from '../activities/entities/activity-open.entity';
 import { ActivityParticipation } from '../activities/entities/activity-participation.entity';
+import { ApiCodes } from '../../common/constants/api-codes';
+import { ApiException } from '../../common/exceptions/api.exception';
 import { AddFreeParticipantDto } from './dto/add-free-participant.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
@@ -39,7 +36,7 @@ export class ParticipationsService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     assertActivityActive(activity);
@@ -49,9 +46,7 @@ export class ParticipationsService {
     });
 
     if (activeCount >= activity.activityOpen.maxParticipants) {
-      throw new BadRequestException(
-        'Activity has reached the maximum number of participants',
-      );
+      throw new ApiException(ApiCodes.ACTIVITY_FULL);
     }
 
     const participation = this.participationRepository.create({
@@ -89,7 +84,7 @@ export class ParticipationsService {
       where: { id: activityId },
     });
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     assertActivityActive(activity);
 
@@ -98,17 +93,15 @@ export class ParticipationsService {
     });
 
     if (!participation) {
-      throw new NotFoundException('Participation not found in this activity');
+      throw new ApiException(ApiCodes.PARTICIPATION_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     if (participation.userId === user.id) {
-      throw new BadRequestException('You cannot change your own role');
+      throw new ApiException(ApiCodes.CANNOT_CHANGE_OWN_ROLE);
     }
 
     if (dto.role === 'host' && participation.userId === null) {
-      throw new BadRequestException(
-        'Only registered users can be assigned the host role',
-      );
+      throw new ApiException(ApiCodes.ONLY_REGISTERED_CAN_BE_HOST);
     }
 
     participation.role = dto.role;
@@ -137,7 +130,7 @@ export class ParticipationsService {
       where: { id: activityId },
     });
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     assertActivityActive(activity);
 
@@ -146,11 +139,11 @@ export class ParticipationsService {
     });
 
     if (!participation) {
-      throw new NotFoundException('Active participation not found in this activity');
+      throw new ApiException(ApiCodes.ACTIVE_PARTICIPATION_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     if (participation.role === 'host') {
-      throw new BadRequestException('Cannot remove a host from the activity');
+      throw new ApiException(ApiCodes.CANNOT_REMOVE_HOST);
     }
 
     participation.status = 'removed';
@@ -164,7 +157,7 @@ export class ParticipationsService {
       where: { id: activityId },
     });
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     assertActivityActive(activity);
 
@@ -173,7 +166,7 @@ export class ParticipationsService {
     });
 
     if (!participation) {
-      throw new NotFoundException('You are not an active participant in this activity');
+      throw new ApiException(ApiCodes.NOT_ACTIVE_PARTICIPANT, HttpStatus.NOT_FOUND);
     }
 
     if (participation.role === 'host') {
@@ -182,9 +175,7 @@ export class ParticipationsService {
       });
 
       if (otherHostCount <= 1) {
-        throw new BadRequestException(
-          'You are the only host, assign another host before leaving',
-        );
+        throw new ApiException(ApiCodes.CANNOT_REMOVE_SOLE_HOST);
       }
     }
 
@@ -200,9 +191,7 @@ export class ParticipationsService {
     });
 
     if (!hostParticipation) {
-      throw new ForbiddenException(
-        'You do not have permission to modify this activity',
-      );
+      throw new ApiException(ApiCodes.ACTIVITY_MODIFY_FORBIDDEN, HttpStatus.FORBIDDEN);
     }
   }
 }

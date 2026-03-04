@@ -9,7 +9,9 @@ import {
   Query,
 } from '@nestjs/common';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ResponseFactory } from '../../common/factories/response.factory';
 import { User } from '../auth/entities/user.entity';
 import { ExternalContactsService } from './external-contacts.service';
 import { CreateExternalContactDto } from './dto/create-external-contact.dto';
@@ -29,7 +31,12 @@ export class ExternalContactsController {
   ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
-    return this.externalContactsService.findAll(user, page, limit);
+    const result = await this.externalContactsService.findAll(user, page, limit);
+    return ResponseFactory.paginated(
+      ApiCodes.EXTERNAL_CONTACT_LIST_RETRIEVED,
+      result.data,
+      result.meta,
+    );
   }
 
   @Post()
@@ -37,12 +44,14 @@ export class ExternalContactsController {
     @Body() dto: CreateExternalContactDto,
     @CurrentUser() user: User,
   ) {
-    return this.externalContactsService.create(dto, user);
+    const result = await this.externalContactsService.create(dto, user);
+    return ResponseFactory.created(ApiCodes.EXTERNAL_CONTACT_CREATED, result);
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    return this.externalContactsService.findOne(id);
+    const result = await this.externalContactsService.findOne(id);
+    return ResponseFactory.ok(ApiCodes.EXTERNAL_CONTACT_RETRIEVED, result);
   }
 
   @Patch(':id')
@@ -51,11 +60,13 @@ export class ExternalContactsController {
     @Body() dto: UpdateExternalContactDto,
     @CurrentUser() user: User,
   ) {
-    return this.externalContactsService.update(id, dto, user);
+    const result = await this.externalContactsService.update(id, dto, user);
+    return ResponseFactory.ok(ApiCodes.EXTERNAL_CONTACT_UPDATED, result);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.externalContactsService.remove(id, user);
+    await this.externalContactsService.remove(id, user);
+    return ResponseFactory.ok(ApiCodes.EXTERNAL_CONTACT_DELETED);
   }
 }

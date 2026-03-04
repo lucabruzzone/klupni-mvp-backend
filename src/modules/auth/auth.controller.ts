@@ -10,12 +10,14 @@ import {
   Query,
   Req,
   Res,
-  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { Public } from '../../common/decorators/public.decorator';
+import { ResponseFactory } from '../../common/factories/response.factory';
+import { ApiException } from '../../common/exceptions/api.exception';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -41,34 +43,39 @@ export class AuthController {
   @Public()
   @Post('auth/register')
   async register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+    const result = await this.authService.register(dto);
+    return ResponseFactory.created(ApiCodes.USER_REGISTERED, result);
   }
 
   @Public()
   @Get('auth/verify-email')
   async verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
+    const result = await this.authService.verifyEmail(token);
+    return ResponseFactory.ok(ApiCodes.EMAIL_VERIFIED, result);
   }
 
   @Public()
   @Post('auth/resend-verification')
   @HttpCode(HttpStatus.OK)
   async resendVerification(@Body() dto: ResendVerificationDto) {
-    return this.authService.resendVerification(dto);
+    const result = await this.authService.resendVerification(dto);
+    return ResponseFactory.ok(ApiCodes.VERIFICATION_EMAIL_SENT, result);
   }
 
   @Public()
   @Post('auth/forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+    const result = await this.authService.forgotPassword(dto);
+    return ResponseFactory.ok(ApiCodes.PASSWORD_RESET_EMAIL_SENT, result);
   }
 
   @Public()
   @Post('auth/reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+    const result = await this.authService.resetPassword(dto);
+    return ResponseFactory.ok(ApiCodes.PASSWORD_RESET, result);
   }
 
   @Public()
@@ -88,10 +95,10 @@ export class AuthController {
       path: '/',
     });
 
-    return {
+    return ResponseFactory.ok(ApiCodes.LOGIN_SUCCESS, {
       accessToken: result.accessToken,
       user: result.user,
-    };
+    });
   }
 
   @Public()
@@ -106,14 +113,15 @@ export class AuthController {
       | undefined;
 
     if (!refreshToken) {
-      throw new UnauthorizedException('Refresh token not found');
+      throw new ApiException(ApiCodes.REFRESH_TOKEN_NOT_FOUND, HttpStatus.UNAUTHORIZED);
     }
 
     try {
-      return await this.authService.refresh(refreshToken);
+      const result = await this.authService.refresh(refreshToken);
+      return ResponseFactory.ok(ApiCodes.REFRESH_SUCCESS, result);
     } catch {
       res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new ApiException(ApiCodes.REFRESH_TOKEN_INVALID, HttpStatus.UNAUTHORIZED);
     }
   }
 
@@ -121,19 +129,21 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
-    return { message: 'Logged out successfully' };
+    return ResponseFactory.ok(ApiCodes.LOGOUT_SUCCESS);
   }
 
   // ── User endpoints ────────────────────────────────────────────────────────
 
   @Get('users/me')
   async getMe(@CurrentUser() user: User) {
-    return this.authService.getUserInfo(user.id);
+    const result = await this.authService.getUserInfo(user.id);
+    return ResponseFactory.ok(ApiCodes.USER_INFO_RETRIEVED, result);
   }
 
   @Get('users/profile')
   async getProfile(@CurrentUser() user: User) {
-    return this.authService.getUserProfile(user.id);
+    const result = await this.authService.getUserProfile(user.id);
+    return ResponseFactory.ok(ApiCodes.USER_PROFILE_RETRIEVED, result);
   }
 
   @Patch('users/profile')
@@ -141,7 +151,8 @@ export class AuthController {
     @CurrentUser() user: User,
     @Body() dto: UpdateProfileDto,
   ) {
-    return this.authService.updateUserProfile(user.id, dto);
+    const result = await this.authService.updateUserProfile(user.id, dto);
+    return ResponseFactory.ok(ApiCodes.USER_PROFILE_UPDATED, result);
   }
 
   @Public()
@@ -150,7 +161,8 @@ export class AuthController {
     @Query('username') username: string,
     @Query('excludeUserId') excludeUserId?: string,
   ) {
-    return this.authService.checkUsernameAvailable(username, excludeUserId);
+    const result = await this.authService.checkUsernameAvailable(username, excludeUserId);
+    return ResponseFactory.ok(ApiCodes.USERNAME_AVAILABLE, result);
   }
 
   @Get('users/search')
@@ -160,11 +172,13 @@ export class AuthController {
   ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
-    return this.authService.searchUsers(query.q, user.id, page, limit);
+    const result = await this.authService.searchUsers(query.q, user.id, page, limit);
+    return ResponseFactory.paginated(ApiCodes.USERS_SEARCH_SUCCESS, result.data, result.meta);
   }
 
   @Get('users/:userId/profile')
   async getPublicProfile(@Param('userId') userId: string) {
-    return this.authService.getPublicProfile(userId);
+    const result = await this.authService.getPublicProfile(userId);
+    return ResponseFactory.ok(ApiCodes.USER_PUBLIC_PROFILE_RETRIEVED, result);
   }
 }

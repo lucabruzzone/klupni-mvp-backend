@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from '../../common/utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -22,7 +17,9 @@ import {
 import { MailService } from '../mail/mail.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { CreateInvitationBatchDto } from './dto/create-invitation-batch.dto';
+import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
+import { ApiException } from '../../common/exceptions/api.exception';
 
 const INVITATION_EXPIRY_HOURS = 48;
 const BATCH_MAX_TOTAL = 50;
@@ -50,15 +47,11 @@ export class InvitationsService {
 
   async create(activityId: string, dto: CreateInvitationDto, hostUser: User) {
     if (!dto.userId && !dto.externalContactId) {
-      throw new BadRequestException(
-        'Either userId or externalContactId must be provided',
-      );
+      throw new ApiException(ApiCodes.INVITATION_USER_OR_CONTACT_REQUIRED);
     }
 
     if (dto.userId && dto.externalContactId) {
-      throw new BadRequestException(
-        'Only one of userId or externalContactId can be provided',
-      );
+      throw new ApiException(ApiCodes.INVITATION_BOTH_PROVIDED);
     }
 
     await this.assertHost(activityId, hostUser.id);
@@ -69,7 +62,7 @@ export class InvitationsService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     assertActivityActive(activity);
@@ -83,9 +76,7 @@ export class InvitationsService {
     });
 
     if (activeCount + pendingCount >= activity.activityOpen.maxParticipants) {
-      throw new BadRequestException(
-        'Activity has reached the maximum number of participants (including pending invitations)',
-      );
+      throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
     }
 
     // ── Resolve target and validate ───────────────────────────────────────────
@@ -100,11 +91,11 @@ export class InvitationsService {
       });
 
       if (!invitedUser) {
-        throw new NotFoundException('User not found');
+        throw new ApiException(ApiCodes.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
       if (invitedUser.id === hostUser.id) {
-        throw new BadRequestException('You cannot invite yourself');
+        throw new ApiException(ApiCodes.INVITATION_CANNOT_INVITE_SELF);
       }
 
       const alreadyParticipating = await this.participationRepository.findOne({
@@ -112,9 +103,7 @@ export class InvitationsService {
       });
 
       if (alreadyParticipating) {
-        throw new BadRequestException(
-          'This user is already an active participant in this activity',
-        );
+        throw new ApiException(ApiCodes.INVITATION_USER_ALREADY_PARTICIPANT);
       }
 
       const existingPending = await this.invitationRepository.findOne({
@@ -122,9 +111,7 @@ export class InvitationsService {
       });
 
       if (existingPending) {
-        throw new BadRequestException(
-          'A pending invitation already exists for this user in this activity',
-        );
+        throw new ApiException(ApiCodes.INVITATION_ALREADY_PENDING);
       }
 
       targetEmail = invitedUser.email;
@@ -135,15 +122,11 @@ export class InvitationsService {
       });
 
       if (!contact) {
-        throw new NotFoundException(
-          'External contact not found or does not belong to you',
-        );
+        throw new ApiException(ApiCodes.EXTERNAL_CONTACT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
       if (!contact.email) {
-        throw new BadRequestException(
-          'This external contact does not have an email address',
-        );
+        throw new ApiException(ApiCodes.INVITATION_EXTERNAL_CONTACT_NO_EMAIL);
       }
 
       const alreadyParticipating = await this.participationRepository.findOne({
@@ -155,9 +138,7 @@ export class InvitationsService {
       });
 
       if (alreadyParticipating) {
-        throw new BadRequestException(
-          'This external contact is already an active participant in this activity',
-        );
+        throw new ApiException(ApiCodes.INVITATION_EXTERNAL_CONTACT_ALREADY_PARTICIPANT);
       }
 
       const existingPending = await this.invitationRepository.findOne({
@@ -169,9 +150,7 @@ export class InvitationsService {
       });
 
       if (existingPending) {
-        throw new BadRequestException(
-          'A pending invitation already exists for this external contact in this activity',
-        );
+        throw new ApiException(ApiCodes.INVITATION_ALREADY_PENDING);
       }
 
       targetEmail = contact.email;
@@ -226,16 +205,12 @@ export class InvitationsService {
     const externalContactIds = [...new Set(dto.externalContactIds ?? [])];
 
     if (userIds.length === 0 && externalContactIds.length === 0) {
-      throw new BadRequestException(
-        'Provide at least one userId or externalContactId',
-      );
+      throw new ApiException(ApiCodes.INVITATION_BATCH_EMPTY);
     }
 
     const total = userIds.length + externalContactIds.length;
     if (total > BATCH_MAX_TOTAL) {
-      throw new BadRequestException(
-        `Cannot invite more than ${BATCH_MAX_TOTAL} recipients at once`,
-      );
+      throw new ApiException(ApiCodes.INVITATION_BATCH_TOO_MANY);
     }
 
     await this.assertHost(activityId, hostUser.id);
@@ -246,7 +221,7 @@ export class InvitationsService {
     });
 
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     assertActivityActive(activity);
@@ -366,10 +341,7 @@ export class InvitationsService {
     }
 
     if (activeCount + pendingCount + targets.length > activity.activityOpen.maxParticipants) {
-      throw new BadRequestException(
-        `Activity has reached the maximum number of participants. ` +
-          `You can invite at most ${activity.activityOpen.maxParticipants - activeCount - pendingCount} more.`,
-      );
+      throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
     }
 
     // ── Create invitations and send emails ─────────────────────────────────────
@@ -556,7 +528,7 @@ export class InvitationsService {
     });
 
     if (!invitation) {
-      throw new BadRequestException('Invalid invitation');
+      throw new ApiException(ApiCodes.INVITATION_INVALID);
     }
 
     const inviterProfile = await this.userProfileRepository.findOne({
@@ -603,36 +575,35 @@ export class InvitationsService {
     });
 
     if (!invitation) {
-      throw new BadRequestException('Invalid invitation');
+      throw new ApiException(ApiCodes.INVITATION_INVALID);
     }
 
     if (invitation.status !== 'pending') {
-      const messages: Record<string, string> = {
-        accepted: 'This invitation has already been accepted',
-        rejected: 'This invitation has been rejected',
-        cancelled: 'This invitation has been cancelled',
-        expired: 'This invitation has expired',
+      const codeMap: Record<string, keyof typeof ApiCodes> = {
+        accepted: 'INVITATION_ALREADY_ACCEPTED',
+        rejected: 'INVITATION_REJECTED',
+        cancelled: 'INVITATION_ALREADY_CANCELLED',
+        expired: 'INVITATION_EXPIRED',
       };
-      throw new BadRequestException(
-        messages[invitation.status] ?? 'Invitation is no longer valid',
-      );
+      const code = codeMap[invitation.status] ?? ApiCodes.INVITATION_INVALID;
+      throw new ApiException(code);
     }
 
     if (invitation.expiresAt < new Date()) {
       invitation.status = 'expired';
       await this.invitationRepository.save(invitation);
-      throw new BadRequestException('Invitation has expired');
+      throw new ApiException(ApiCodes.INVITATION_EXPIRED);
     }
 
     const activity = invitation.activity;
 
     if (!activity || activity.status !== 'open') {
-      throw new BadRequestException('Activity is no longer open');
+      throw new ApiException(ApiCodes.INVITATION_ACTIVITY_NOT_OPEN);
     }
 
     const now = new Date();
     if (activity.endAt && activity.endAt < now) {
-      throw new BadRequestException('Activity has already ended');
+      throw new ApiException(ApiCodes.ACTIVITY_ALREADY_ENDED);
     }
 
     const activeCount = await this.participationRepository.count({
@@ -640,9 +611,7 @@ export class InvitationsService {
     });
 
     if (activeCount >= activity.activityOpen.maxParticipants) {
-      throw new BadRequestException(
-        'Activity has reached the maximum number of participants',
-      );
+      throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -654,9 +623,7 @@ export class InvitationsService {
       });
 
       if (existing && existing.status === 'active') {
-        throw new BadRequestException(
-          'This invitee is already an active participant in this activity',
-        );
+        throw new ApiException(ApiCodes.INVITATION_INVITEE_ALREADY_PARTICIPANT);
       }
 
       if (existing) {
@@ -713,7 +680,7 @@ export class InvitationsService {
       where: { id: activityId },
     });
     if (!activity) {
-      throw new NotFoundException('Activity not found');
+      throw new ApiException(ApiCodes.ACTIVITY_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     assertActivityActive(activity);
 
@@ -722,13 +689,11 @@ export class InvitationsService {
     });
 
     if (!invitation) {
-      throw new NotFoundException('Invitation not found in this activity');
+      throw new ApiException(ApiCodes.INVITATION_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     if (invitation.status !== 'pending') {
-      throw new BadRequestException(
-        `Cannot cancel an invitation with status '${invitation.status}'`,
-      );
+      throw new ApiException(ApiCodes.INVITATION_CANCEL_INVALID_STATUS);
     }
 
     invitation.status = 'cancelled';
@@ -743,9 +708,7 @@ export class InvitationsService {
     });
 
     if (!hostParticipation) {
-      throw new ForbiddenException(
-        'You do not have permission to manage invitations for this activity',
-      );
+      throw new ApiException(ApiCodes.INVITATION_MANAGE_FORBIDDEN, HttpStatus.FORBIDDEN);
     }
   }
 }

@@ -9,7 +9,9 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ResponseFactory } from '../../common/factories/response.factory';
 import { User } from '../auth/entities/user.entity';
 import { ParticipationsService } from './participations.service';
 import { AddFreeParticipantDto } from './dto/add-free-participant.dto';
@@ -25,7 +27,12 @@ export class ParticipationsController {
     @Body() dto: AddFreeParticipantDto,
     @CurrentUser() user: User,
   ) {
-    return this.participationsService.addFreeParticipant(activityId, dto, user);
+    const result = await this.participationsService.addFreeParticipant(
+      activityId,
+      dto,
+      user,
+    );
+    return ResponseFactory.created(ApiCodes.PARTICIPANT_ADDED, result);
   }
 
   @Patch(':participationId/role')
@@ -35,12 +42,13 @@ export class ParticipationsController {
     @Body() dto: UpdateRoleDto,
     @CurrentUser() user: User,
   ) {
-    return this.participationsService.updateRole(
+    const result = await this.participationsService.updateRole(
       activityId,
       participationId,
       dto,
       user,
     );
+    return ResponseFactory.ok(ApiCodes.PARTICIPANT_ROLE_UPDATED, result);
   }
 
   @Patch(':participationId/remove')
@@ -50,11 +58,12 @@ export class ParticipationsController {
     @Param('participationId') participationId: string,
     @CurrentUser() user: User,
   ) {
-    return this.participationsService.removeParticipant(
+    await this.participationsService.removeParticipant(
       activityId,
       participationId,
       user,
     );
+    return ResponseFactory.ok(ApiCodes.PARTICIPANT_REMOVED);
   }
 
   @Delete('me')
@@ -63,6 +72,7 @@ export class ParticipationsController {
     @Param('activityId') activityId: string,
     @CurrentUser() user: User,
   ) {
-    return this.participationsService.leaveActivity(activityId, user);
+    await this.participationsService.leaveActivity(activityId, user);
+    return ResponseFactory.ok(ApiCodes.ACTIVITY_LEFT);
   }
 }

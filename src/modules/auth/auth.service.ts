@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,7 +6,9 @@ import * as bcrypt from 'bcrypt';
 import { DataSource, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
+import { ApiException } from '../../common/exceptions/api.exception';
 import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -53,7 +48,7 @@ export class AuthService {
     });
 
     if (existing) {
-      throw new ConflictException('Email already in use');
+      throw new ApiException(ApiCodes.EMAIL_ALREADY_IN_USE, HttpStatus.CONFLICT);
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
@@ -99,15 +94,15 @@ export class AuthService {
     });
 
     if (!verificationToken) {
-      throw new BadRequestException('Invalid verification token');
+      throw new ApiException(ApiCodes.INVALID_VERIFICATION_TOKEN);
     }
 
     if (verificationToken.usedAt) {
-      throw new BadRequestException('Verification token has already been used');
+      throw new ApiException(ApiCodes.VERIFICATION_TOKEN_ALREADY_USED);
     }
 
     if (verificationToken.expiresAt < new Date()) {
-      throw new BadRequestException('Verification token has expired');
+      throw new ApiException(ApiCodes.VERIFICATION_TOKEN_EXPIRED);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -133,7 +128,7 @@ export class AuthService {
     }
 
     if (user.emailVerifiedAt) {
-      throw new BadRequestException('Email is already verified');
+      throw new ApiException(ApiCodes.EMAIL_ALREADY_VERIFIED);
     }
 
     await this.verificationTokenRepository
@@ -210,15 +205,15 @@ export class AuthService {
     });
 
     if (!resetToken) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new ApiException(ApiCodes.INVALID_RESET_TOKEN);
     }
 
     if (resetToken.usedAt) {
-      throw new BadRequestException('This reset link has already been used');
+      throw new ApiException(ApiCodes.RESET_TOKEN_ALREADY_USED);
     }
 
     if (resetToken.expiresAt < new Date()) {
-      throw new BadRequestException('This reset link has expired');
+      throw new ApiException(ApiCodes.RESET_TOKEN_EXPIRED);
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
@@ -249,19 +244,17 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new ApiException(ApiCodes.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new ApiException(ApiCodes.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
     }
 
     if (!user.emailVerifiedAt) {
-      throw new ForbiddenException(
-        'Please verify your email before logging in',
-      );
+      throw new ApiException(ApiCodes.EMAIL_NOT_VERIFIED, HttpStatus.FORBIDDEN);
     }
 
     const accessToken = this.generateAccessToken(user);
@@ -286,14 +279,14 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new UnauthorizedException('Invalid refresh token');
+        throw new ApiException(ApiCodes.REFRESH_TOKEN_INVALID, HttpStatus.UNAUTHORIZED);
       }
 
       const accessToken = this.generateAccessToken(user);
 
       return { accessToken };
     } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new ApiException(ApiCodes.REFRESH_TOKEN_INVALID, HttpStatus.UNAUTHORIZED);
     }
   }
 
@@ -303,7 +296,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new ApiException(ApiCodes.USER_NOT_FOUND, HttpStatus.UNAUTHORIZED);
     }
 
     const profile = await this.userProfileRepository.findOne({
@@ -325,7 +318,7 @@ export class AuthService {
     });
 
     if (!profile) {
-      throw new UnauthorizedException('User not found');
+      throw new ApiException(ApiCodes.USER_NOT_FOUND, HttpStatus.UNAUTHORIZED);
     }
 
     return {
@@ -345,14 +338,10 @@ export class AuthService {
     excludeUserId?: string,
   ): Promise<{ available: boolean }> {
     if (!username || username.length < 3 || username.length > 30) {
-      throw new BadRequestException(
-        'Username must be between 3 and 30 characters',
-      );
+      throw new ApiException(ApiCodes.USERNAME_INVALID_LENGTH);
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      throw new BadRequestException(
-        'Username can only contain letters, numbers and underscores',
-      );
+      throw new ApiException(ApiCodes.USERNAME_INVALID_CHARS);
     }
 
     const qb = this.userProfileRepository
@@ -374,7 +363,7 @@ export class AuthService {
     limit: number = 10,
   ) {
     if (!q || q.trim().length < 2) {
-      throw new BadRequestException('Search query must be at least 2 characters');
+      throw new ApiException(ApiCodes.SEARCH_QUERY_TOO_SHORT);
     }
 
     const searchTerm = `%${q.trim()}%`;
@@ -422,7 +411,7 @@ export class AuthService {
     });
 
     if (!profile) {
-      throw new NotFoundException('User not found');
+      throw new ApiException(ApiCodes.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     return {
@@ -444,7 +433,7 @@ export class AuthService {
     });
 
     if (!profile) {
-      throw new UnauthorizedException('User not found');
+      throw new ApiException(ApiCodes.USER_NOT_FOUND, HttpStatus.UNAUTHORIZED);
     }
 
     if (data.username && data.username !== profile.username) {
@@ -453,7 +442,7 @@ export class AuthService {
       });
 
       if (existing) {
-        throw new ConflictException('Username already taken');
+        throw new ApiException(ApiCodes.USERNAME_TAKEN, HttpStatus.CONFLICT);
       }
     }
 

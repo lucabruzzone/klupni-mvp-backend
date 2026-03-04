@@ -9,7 +9,9 @@ import {
   Query,
 } from '@nestjs/common';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { Public } from '../../common/decorators/public.decorator';
+import { ResponseFactory } from '../../common/factories/response.factory';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../auth/entities/user.entity';
 import { InvitationsService } from './invitations.service';
@@ -28,7 +30,8 @@ export class InvitationsController {
     @Body() dto: CreateInvitationDto,
     @CurrentUser() user: User,
   ) {
-    return this.invitationsService.create(activityId, dto, user);
+    const result = await this.invitationsService.create(activityId, dto, user);
+    return ResponseFactory.created(ApiCodes.INVITATION_CREATED, result);
   }
 
   @Post('activities/:activityId/invitations/batch')
@@ -37,7 +40,8 @@ export class InvitationsController {
     @Body() dto: CreateInvitationBatchDto,
     @CurrentUser() user: User,
   ) {
-    return this.invitationsService.createBatch(activityId, dto, user);
+    const result = await this.invitationsService.createBatch(activityId, dto, user);
+    return ResponseFactory.ok(ApiCodes.INVITATION_BATCH_CREATED, result);
   }
 
   @Get('activities/:activityId/invitations')
@@ -49,7 +53,18 @@ export class InvitationsController {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const status = query.status ?? 'all';
-    return this.invitationsService.findAllByActivity(activityId, user, page, limit, status);
+    const result = await this.invitationsService.findAllByActivity(
+      activityId,
+      user,
+      page,
+      limit,
+      status,
+    );
+    return ResponseFactory.paginated(
+      ApiCodes.INVITATION_LIST_RETRIEVED,
+      result.data,
+      result.meta,
+    );
   }
 
   @Get('invitations/received')
@@ -60,20 +75,32 @@ export class InvitationsController {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const status = query.status ?? 'all';
-    return this.invitationsService.findReceivedInvitations(user.id, page, limit, status);
+    const result = await this.invitationsService.findReceivedInvitations(
+      user.id,
+      page,
+      limit,
+      status,
+    );
+    return ResponseFactory.paginated(
+      ApiCodes.INVITATION_RECEIVED_LIST_RETRIEVED,
+      result.data,
+      result.meta,
+    );
   }
 
   @Public()
   @Get('invitations/preview')
   async preview(@Query('token') token: string) {
-    return this.invitationsService.preview(token);
+    const result = await this.invitationsService.preview(token);
+    return ResponseFactory.ok(ApiCodes.INVITATION_PREVIEW_RETRIEVED, result);
   }
 
   @Public()
   @Post('invitations/accept')
   @HttpCode(HttpStatus.OK)
   async accept(@Query('token') token: string) {
-    return this.invitationsService.accept(token);
+    const result = await this.invitationsService.accept(token);
+    return ResponseFactory.ok(ApiCodes.INVITATION_ACCEPTED, result);
   }
 
   @Post('activities/:activityId/invitations/:invitationId/cancel')
@@ -83,6 +110,7 @@ export class InvitationsController {
     @Param('invitationId') invitationId: string,
     @CurrentUser() user: User,
   ) {
-    return this.invitationsService.cancel(activityId, invitationId, user);
+    await this.invitationsService.cancel(activityId, invitationId, user);
+    return ResponseFactory.ok(ApiCodes.INVITATION_CANCELLED);
   }
 }

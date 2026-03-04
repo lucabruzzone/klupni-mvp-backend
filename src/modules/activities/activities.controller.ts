@@ -11,7 +11,9 @@ import {
   Query,
 } from '@nestjs/common';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ResponseFactory } from '../../common/factories/response.factory';
 import { User } from '../auth/entities/user.entity';
 import { ActivitiesService } from './activities.service';
 import { CreateActivityDto } from './dto/create-activity.dto';
@@ -25,7 +27,8 @@ export class ActivitiesController {
 
   @Post()
   async create(@Body() dto: CreateActivityDto, @CurrentUser() user: User) {
-    return this.activitiesService.create(dto, user);
+    const result = await this.activitiesService.create(dto, user);
+    return ResponseFactory.created(ApiCodes.ACTIVITY_CREATED, result);
   }
 
   @Get()
@@ -33,12 +36,18 @@ export class ActivitiesController {
     @Query() query: ListActivitiesQueryDto,
     @CurrentUser() user: User,
   ) {
-    return this.activitiesService.findAll(query, user);
+    const result = await this.activitiesService.findAll(query, user);
+    return ResponseFactory.paginated(
+      ApiCodes.ACTIVITY_LIST_RETRIEVED,
+      result.data,
+      result.meta,
+    );
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    return this.activitiesService.findOne(id);
+    const result = await this.activitiesService.findOne(id);
+    return ResponseFactory.ok(ApiCodes.ACTIVITY_RETRIEVED, result);
   }
 
   @Get(':id/participants')
@@ -46,7 +55,12 @@ export class ActivitiesController {
     @Param('id') id: string,
     @Query() query: ListParticipantsQueryDto,
   ) {
-    return this.activitiesService.listParticipants(id, query);
+    const result = await this.activitiesService.listParticipants(id, query);
+    return ResponseFactory.paginated(
+      ApiCodes.ACTIVITY_PARTICIPANTS_LIST_RETRIEVED,
+      result.data,
+      result.meta,
+    );
   }
 
   @Patch(':id')
@@ -55,12 +69,14 @@ export class ActivitiesController {
     @Body() dto: UpdateActivityDto,
     @CurrentUser() user: User,
   ) {
-    return this.activitiesService.update(id, dto, user);
+    const result = await this.activitiesService.update(id, dto, user);
+    return ResponseFactory.ok(ApiCodes.ACTIVITY_UPDATED, result);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.activitiesService.remove(id, user);
+    await this.activitiesService.remove(id, user);
+    return ResponseFactory.ok(ApiCodes.ACTIVITY_DELETED);
   }
 }

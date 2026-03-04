@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
+import { ApiException } from '../../common/exceptions/api.exception';
 import { User } from '../auth/entities/user.entity';
 import { ExternalContact } from './entities/external-contact.entity';
 import { CreateExternalContactDto } from './dto/create-external-contact.dto';
@@ -59,7 +61,7 @@ export class ExternalContactsService {
     });
 
     if (!contact) {
-      throw new NotFoundException('External contact not found');
+      throw new ApiException(ApiCodes.EXTERNAL_CONTACT_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     return {
@@ -78,9 +80,7 @@ export class ExternalContactsService {
     });
 
     if (!contact) {
-      throw new NotFoundException(
-        'External contact not found or does not belong to you',
-      );
+      throw new ApiException(ApiCodes.EXTERNAL_CONTACT_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     if (dto.alias !== undefined) contact.alias = dto.alias;
@@ -105,9 +105,7 @@ export class ExternalContactsService {
     });
 
     if (!contact) {
-      throw new NotFoundException(
-        'External contact not found or does not belong to you',
-      );
+      throw new ApiException(ApiCodes.EXTERNAL_CONTACT_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     await this.externalContactRepository.softRemove(contact);

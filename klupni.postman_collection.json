@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Klupni MVP",
-    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: set manually after listing activity details",
+    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nAll responses use the envelope format: `{ success, code, message, data, meta }`. Payload is in `data`; paginated responses include `meta`.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: populated automatically after getting activity details\n- `externalContactId`: populated automatically after creating a contact\n- `invitationId`: populated automatically after sending an invitation",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -158,8 +158,8 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.accessToken) {",
-                  "  pm.collectionVariables.set('accessToken', res.accessToken);",
+                  "if (res.data?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.data.accessToken);",
                   "  console.log('accessToken saved to collection variables');",
                   "}"
                 ],
@@ -194,8 +194,8 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.accessToken) {",
-                  "  pm.collectionVariables.set('accessToken', res.accessToken);",
+                  "if (res.data?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.data.accessToken);",
                   "  console.log('accessToken refreshed and saved');",
                   "}"
                 ],
@@ -358,9 +358,9 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.id) {",
-                  "  pm.collectionVariables.set('activityId', res.id);",
-                  "  console.log('activityId saved:', res.id);",
+                  "if (res.data?.id) {",
+                  "  pm.collectionVariables.set('activityId', res.data.id);",
+                  "  console.log('activityId saved:', res.data.id);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -417,14 +417,15 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.participants && res.participants.length > 0) {",
-                  "  const nonHost = res.participants.find(p => p.role !== 'host');",
+                  "const participants = res.data?.participants;",
+                  "if (participants && participants.length > 0) {",
+                  "  const nonHost = participants.find(p => p.role !== 'host');",
                   "  if (nonHost) {",
                   "    pm.collectionVariables.set('participationId', nonHost.id);",
                   "    console.log('participationId (non-host) saved:', nonHost.id);",
                   "  } else {",
-                  "    pm.collectionVariables.set('participationId', res.participants[0].id);",
-                  "    console.log('participationId saved:', res.participants[0].id);",
+                  "    pm.collectionVariables.set('participationId', participants[0].id);",
+                  "    console.log('participationId saved:', participants[0].id);",
                   "  }",
                   "}"
                 ],
@@ -621,7 +622,9 @@
                 "exec": [
                   "if (pm.response.code === 201) {",
                   "  const json = pm.response.json();",
-                  "  pm.collectionVariables.set('externalContactId', json.id);",
+                  "  if (json.data?.id) {",
+                  "    pm.collectionVariables.set('externalContactId', json.data.id);",
+                  "  }",
                   "}"
                 ]
               }
@@ -714,9 +717,9 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.id) {",
-                  "  pm.collectionVariables.set('invitationId', res.id);",
-                  "  console.log('invitationId saved:', res.id);",
+                  "if (res.data?.id) {",
+                  "  pm.collectionVariables.set('invitationId', res.data.id);",
+                  "  console.log('invitationId saved:', res.data.id);",
                   "}"
                 ],
                 "type": "text/javascript"
