@@ -11,6 +11,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { ExternalContactsModule } from './modules/external-contacts/external-contacts.module';
 import { ParticipationsModule } from './modules/participations/participations.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
+import { ActivityTeamsModule } from './modules/activity-teams/activity-teams.module';
 import { MailModule } from './modules/mail/mail.module';
 
 @Module({
@@ -63,6 +64,7 @@ import { MailModule } from './modules/mail/mail.module';
     ExternalContactsModule,
     ParticipationsModule,
     InvitationsModule,
+    ActivityTeamsModule,
     MailModule,
   ],
 })

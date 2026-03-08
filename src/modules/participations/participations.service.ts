@@ -7,6 +7,7 @@ import { User } from '../auth/entities/user.entity';
 import { Activity } from '../activities/entities/activity.entity';
 import { ActivityOpen } from '../activities/entities/activity-open.entity';
 import { ActivityParticipation } from '../activities/entities/activity-participation.entity';
+import { ActivityTeamMember } from '../activities/entities/activity-team-member.entity';
 import { ActivityInvitation } from '../invitations/entities/activity-invitation.entity';
 import { ExternalContact } from '../external-contacts/entities/external-contact.entity';
 import { ApiCodes } from '../../common/constants/api-codes';
@@ -30,6 +31,8 @@ export class ParticipationsService {
     private readonly externalContactRepository: Repository<ExternalContact>,
     @InjectRepository(ActivityInvitation)
     private readonly invitationRepository: Repository<ActivityInvitation>,
+    @InjectRepository(ActivityTeamMember)
+    private readonly teamMemberRepository: Repository<ActivityTeamMember>,
   ) {}
 
   async addParticipant(
@@ -282,6 +285,7 @@ export class ParticipationsService {
     participation.status = 'removed';
     await this.participationRepository.save(participation);
 
+    await this.removeFromTeams(participation.id);
     await this.cancelInvitationsForParticipant(activityId, participation.userId, participation.externalContactId);
 
     return { message: 'Participant removed successfully' };
@@ -317,9 +321,14 @@ export class ParticipationsService {
     participation.status = 'left';
     await this.participationRepository.save(participation);
 
+    await this.removeFromTeams(participation.id);
     await this.cancelInvitationsForParticipant(activityId, participation.userId, participation.externalContactId);
 
     return { message: 'You have left the activity' };
+  }
+
+  private async removeFromTeams(participationId: string): Promise<void> {
+    await this.teamMemberRepository.delete({ activityParticipationId: participationId });
   }
 
   private async cancelInvitationsForParticipant(

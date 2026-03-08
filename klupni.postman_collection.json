@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Klupni MVP",
-    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nAll responses use the envelope format: `{ success, code, message, data, meta }`. Payload is in `data`; paginated responses include `meta`.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: populated automatically after getting activity details\n- `externalContactId`: populated automatically after creating an external contact\n- `contactId`: set manually from list contacts response\n- `invitationId`: populated automatically after sending an invitation",
+    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nAll responses use the envelope format: `{ success, code, message, data, meta }`. Payload is in `data`; paginated responses include `meta`.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: populated automatically after getting activity details\n- `externalContactId`: populated automatically after creating an external contact\n- `contactId`: set manually from list contacts response\n- `invitationId`: populated automatically after sending an invitation\n- `teamId`: populated automatically after creating an activity team\n- `teamMemberId`: populated automatically after adding a member to a team",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -42,6 +42,16 @@
     },
     {
       "key": "contactId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teamId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teamMemberId",
       "value": "",
       "type": "string"
     }
@@ -611,6 +621,203 @@
               "path": ["api", "activities", "{{activityId}}", "participations", "me"]
             },
             "description": "Leave an activity as the authenticated user.\n\n- If the user is not an active participant: 404\n- If the user is the **only** host: 400 — must assign another host first\n- Sets `status = 'left'` on the participation row\n\nResponds 200 with `{ message: 'You have left the activity' }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Activity Teams",
+      "item": [
+        {
+          "name": "Create Activity Team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data?.id) {",
+                  "  pm.collectionVariables.set('teamId', res.data.id);",
+                  "  console.log('teamId saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Equipo Rojo\",\n  \"color\": \"#EF4444\",\n  \"photoUrl\": null,\n  \"displayOrder\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Create a team within an activity. Host-only.\n\n**Request body:**\n- `name` (required): string, 1-100 chars\n- `color` (optional): hex color, e.g. #3B82F6\n- `photoUrl` (optional): string, max 500 chars\n- `displayOrder` (optional): integer for ordering\n\nResponds 201 with `{ id, activityId, name, color, photoUrl, displayOrder, createdAt, updatedAt }`.\n\nThe test script saves `teamId` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "List Activity Teams",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams"]
+            },
+            "description": "List all teams of an activity. Host-only.\n\nResponds 200 with `{ data: [{ id, activityId, name, color, photoUrl, displayOrder, createdAt, updatedAt }, ...] }`.\n\nTeams are ordered by displayOrder ASC, then by createdAt."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activity Team",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}"]
+            },
+            "description": "Get a single team by ID. Host-only.\n\nResponds 200 with `{ id, activityId, name, color, photoUrl, displayOrder, createdAt, updatedAt }`.\n\nResponds 404 if team not found or does not belong to the activity."
+          },
+          "response": []
+        },
+        {
+          "name": "List Team Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}", "members"]
+            },
+            "description": "List all participants in a team. Host-only.\n\nReturns array of members with: id, teamId, activityParticipationId, isCaptain, createdAt, updatedAt, participant (type, displayName, avatarUrl, userId, externalContactId).\n\nCaptain first, then by join date."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Team Member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data?.id) {",
+                  "  pm.collectionVariables.set('teamMemberId', res.data.id);",
+                  "  console.log('teamMemberId saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}", "members"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activityParticipationId\": \"{{participationId}}\",\n  \"isCaptain\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add an activity participant to a team. Host-only.\n\n**Request body:**\n- `activityParticipationId` (required): UUID of an active participation in the activity\n- `isCaptain` (optional): boolean, default false\n\n**Checks:**\n- Participation must belong to the activity and be active\n- Participant cannot already be in any team (one participation = one team max)\n\nResponds 201 with `{ id, teamId, activityParticipationId, isCaptain, createdAt }`.\n\nThe test script saves `teamMemberId` to the collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Team Captain",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}/members/{{teamMemberId}}/captain",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}", "members", "{{teamMemberId}}", "captain"]
+            },
+            "description": "Make a team member the captain. Host-only.\n\n**Toggle behavior:** Only one captain per team. When promoting a member to captain, any existing captain is automatically demoted (isCaptain=false).\n\nResponds 200 with `{ id, teamId, activityParticipationId, isCaptain, updatedAt }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Team Member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}/members/{{teamMemberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}", "members", "{{teamMemberId}}"]
+            },
+            "description": "Permanently remove a member from a team. Host-only. Hard delete (no soft delete).\n\nResponds 200 with `{ message: 'Member removed from team successfully' }`.\n\nResponds 404 if member not found."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Activity Team",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Equipo Rojo (actualizado)\",\n  \"color\": \"#DC2626\",\n  \"displayOrder\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update a team. Host-only. All fields are optional.\n\n- `name` (string, 1-100 chars)\n- `color` (hex, e.g. #3B82F6)\n- `photoUrl` (string, max 500)\n- `displayOrder` (integer)\n\nResponds 200 with the updated team."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Activity Team",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/teams/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "teams", "{{teamId}}"]
+            },
+            "description": "Permanently delete a team and all its members (activity_team_members). Host-only.\n\n**Cascade:** The DB FK has ON DELETE CASCADE — deleting the team automatically deletes all activity_team_members. Hard delete (no soft delete).\n\nResponds 200 with `{ message: 'Team deleted successfully' }`.\n\nResponds 404 if team not found."
           },
           "response": []
         }

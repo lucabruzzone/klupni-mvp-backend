@@ -1,0 +1,321 @@
+// Klupni MVP - Database Schema
+// Compatible con dbdiagram.io - Importar en https://dbdiagram.io/d
+// Organizado por Bounded Contexts (DDD)
+
+Project Klupni {
+  database_type: 'PostgreSQL'
+  Note: 'Backend Klupni - App para actividades deportivas grupales'
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Identity
+// Usuarios, perfiles, verificación de email, reset de contraseña
+// =============================================================================
+
+Table users {
+  id uuid [pk, default: `uuid_generate_v4()`, note: 'PK']
+  email text [not null, unique, note: 'UQ_users_email']
+  password_hash text [not null]
+  email_verified_at timestamp [null]
+  deleted_at timestamp [null, note: 'Soft delete']
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    deleted_at [name: 'IDX_users_deleted_at']
+  }
+}
+
+Table user_profiles {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null, unique, note: 'UQ_user_profiles_user_id']
+  first_name text [null]
+  last_name text [null]
+  username text [null, unique, note: 'UQ_user_profiles_username']
+  avatar_url text [null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id [name: 'IDX_user_profiles_user_id']
+    deleted_at [name: 'IDX_user_profiles_deleted_at']
+  }
+}
+
+Table email_verification_tokens {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null]
+  token text [not null, unique, note: 'UQ_email_verification_tokens_token']
+  expires_at timestamp [not null]
+  used_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id [name: 'IDX_email_verification_tokens_user_id']
+    token [name: 'IDX_email_verification_tokens_token']
+    expires_at [name: 'IDX_email_verification_tokens_expires_at']
+  }
+}
+
+Table password_reset_tokens {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null]
+  token text [not null, unique, note: 'UQ_password_reset_tokens_token']
+  expires_at timestamp [not null]
+  used_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    user_id [name: 'IDX_password_reset_tokens_user_id']
+    token [name: 'IDX_password_reset_tokens_token']
+    expires_at [name: 'IDX_password_reset_tokens_expires_at']
+  }
+}
+
+TableGroup identity [note: 'Bounded Context: Identity - Autenticación y perfiles'] {
+  users
+  user_profiles
+  email_verification_tokens
+  password_reset_tokens
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Activities
+// Actividades deportivas y sus detalles (deporte, ubicación, cupos)
+// =============================================================================
+
+Table activities {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  created_by_user_id uuid [not null]
+  title text [not null]
+  description text [null]
+  start_at timestamp [not null]
+  end_at timestamp [null]
+  status text [not null, note: 'draft|open|closed|cancelled|completed']
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    created_by_user_id [name: 'IDX_activities_created_by_user_id']
+    start_at [name: 'IDX_activities_start_at']
+    status [name: 'IDX_activities_status']
+    deleted_at [name: 'IDX_activities_deleted_at']
+  }
+}
+
+Table activity_open {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  activity_id uuid [not null, unique, note: 'One-to-one con activities']
+  sport_name text [null]
+  location_text text [null]
+  max_participants integer [not null]
+  min_participants integer [not null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    deleted_at [name: 'IDX_activity_open_deleted_at']
+  }
+}
+
+TableGroup activities [note: 'Bounded Context: Activities - Actividades deportivas'] {
+  activities
+  activity_open
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Contacts
+// Contactos externos (sin cuenta) y agenda de contactos (usuarios + externos)
+// =============================================================================
+
+Table external_contacts {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  owner_user_id uuid [not null]
+  alias text [not null]
+  email text [null]
+  phone_number text [null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    owner_user_id [name: 'IDX_external_contacts_owner_user_id']
+    deleted_at [name: 'IDX_external_contacts_deleted_at']
+  }
+}
+
+Table contacts {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  owner_user_id uuid [not null]
+  user_id uuid [null, note: 'Referencia a usuario registrado']
+  external_contact_id uuid [null, note: 'Referencia a contacto externo']
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    owner_user_id [name: 'IDX_contacts_owner_user_id']
+    user_id [name: 'IDX_contacts_user_id']
+    external_contact_id [name: 'IDX_contacts_external_contact_id']
+    deleted_at [name: 'IDX_contacts_deleted_at']
+    (owner_user_id, user_id) [unique, name: 'UQ_contacts_owner_user_id_user_id']
+    (owner_user_id, external_contact_id) [unique, name: 'UQ_contacts_owner_user_id_external_contact_id']
+  }
+
+  checks {
+    `(user_id IS NOT NULL AND external_contact_id IS NULL) OR (user_id IS NULL AND external_contact_id IS NOT NULL)` [name: 'CHK_contacts_one_reference']
+  }
+
+  Note: 'Partial uniques en PostgreSQL: UQ_contacts_owner_user_id_user_id WHERE user_id IS NOT NULL; UQ_contacts_owner_user_id_external_contact_id WHERE external_contact_id IS NOT NULL'
+}
+
+TableGroup contacts [note: 'Bounded Context: Contacts - Agenda de contactos'] {
+  external_contacts
+  contacts
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Participations
+// Participaciones en actividades (quién participa, rol, estado)
+// =============================================================================
+
+Table activity_participations {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  activity_id uuid [not null]
+  user_id uuid [null, note: 'Usuario registrado o null si es external_contact']
+  external_contact_id uuid [null]
+  alias text [null]
+  role text [not null, note: 'host|participant']
+  status text [not null, note: 'active|removed|left']
+  joined_at timestamp [not null]
+  confirmed_at timestamp [null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    activity_id [name: 'IDX_activity_participations_activity_id']
+    user_id [name: 'IDX_activity_participations_user_id']
+    external_contact_id [name: 'IDX_activity_participations_external_contact_id']
+    deleted_at [name: 'IDX_activity_participations_deleted_at']
+  }
+}
+
+TableGroup participations [note: 'Bounded Context: Participations - Participantes en actividades'] {
+  activity_participations
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Invitations
+// Invitaciones a actividades (por email, usuarios o contactos externos)
+// =============================================================================
+
+Table activity_invitations {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  activity_id uuid [not null]
+  invited_by_user_id uuid [not null]
+  user_id uuid [null]
+  external_contact_id uuid [null]
+  email text [not null]
+  token text [not null, unique]
+  status text [not null, note: 'pending|accepted|rejected|cancelled|expired']
+  expires_at timestamp [not null]
+  responded_at timestamp [null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    activity_id [name: 'IDX_activity_invitations_activity_id']
+    user_id [name: 'IDX_activity_invitations_user_id']
+    external_contact_id [name: 'IDX_activity_invitations_external_contact_id']
+    token [name: 'IDX_activity_invitations_token']
+    deleted_at [name: 'IDX_activity_invitations_deleted_at']
+  }
+}
+
+TableGroup invitations [note: 'Bounded Context: Invitations - Invitaciones a actividades'] {
+  activity_invitations
+}
+
+// =============================================================================
+// BOUNDED CONTEXT: Teams
+// Equipos dentro de una actividad y distribución de participantes
+// =============================================================================
+
+Table activity_teams {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  activity_id uuid [not null]
+  name text [not null]
+  color text [null, note: 'Hex color, ej: #3B82F6']
+  photo_url text [null]
+  display_order integer [null]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    activity_id [name: 'IDX_activity_teams_activity_id']
+    deleted_at [name: 'IDX_activity_teams_deleted_at']
+  }
+}
+
+Table activity_team_members {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  team_id uuid [not null]
+  activity_participation_id uuid [not null, unique, note: 'UQ_activity_team_members_participation_id']
+  is_captain boolean [not null, default: false]
+  deleted_at timestamp [null]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  indexes {
+    team_id [name: 'IDX_activity_team_members_team_id']
+    activity_participation_id [name: 'IDX_activity_team_members_participation_id']
+    deleted_at [name: 'IDX_activity_team_members_deleted_at']
+  }
+}
+
+TableGroup teams [note: 'Bounded Context: Teams - Equipos dentro de una actividad'] {
+  activity_teams
+  activity_team_members
+}
+
+// =============================================================================
+// RELATIONSHIPS (References)
+// Agrupadas por bounded context
+// =============================================================================
+
+// Identity
+Ref: user_profiles.user_id > users.id
+Ref: email_verification_tokens.user_id > users.id
+Ref: password_reset_tokens.user_id > users.id
+
+// Activities (depende de Identity)
+Ref: activities.created_by_user_id > users.id
+Ref: activity_open.activity_id - activities.id
+
+// Contacts (depende de Identity)
+Ref: external_contacts.owner_user_id > users.id
+Ref: contacts.owner_user_id > users.id
+Ref: contacts.user_id > users.id
+Ref: contacts.external_contact_id > external_contacts.id
+
+// Participations (depende de Activities, Identity, Contacts)
+Ref: activity_participations.activity_id > activities.id
+Ref: activity_participations.user_id > users.id
+Ref: activity_participations.external_contact_id > external_contacts.id
+
+// Invitations (depende de Activities, Identity, Contacts)
+Ref: activity_invitations.activity_id > activities.id
+Ref: activity_invitations.invited_by_user_id > users.id
+Ref: activity_invitations.user_id > users.id
+Ref: activity_invitations.external_contact_id > external_contacts.id
+
+// Teams (depende de Activities, Participations)
+Ref: activity_teams.activity_id > activities.id
+Ref: activity_team_members.team_id > activity_teams.id
+Ref: activity_team_members.activity_participation_id > activity_participations.id

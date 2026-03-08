@@ -64,6 +64,24 @@ export const ApiMessages: Record<ApiCode, string> = {
   ACTIVITY_MODIFY_FORBIDDEN:
     'You do not have permission to modify this activity',
 
+  // Activity teams success
+  ACTIVITY_TEAM_CREATED: 'Team created successfully',
+  ACTIVITY_TEAM_LIST_RETRIEVED: 'Teams list retrieved',
+  ACTIVITY_TEAM_RETRIEVED: 'Team retrieved',
+  ACTIVITY_TEAM_UPDATED: 'Team updated successfully',
+  ACTIVITY_TEAM_DELETED: 'Team deleted successfully',
+
+  // Activity teams errors
+  ACTIVITY_TEAM_NOT_FOUND: 'Team not found in this activity',
+  ACTIVITY_TEAM_MEMBERS_LIST_RETRIEVED: 'Team members list retrieved',
+  ACTIVITY_TEAM_MEMBER_ADDED: 'Member added to team successfully',
+  ACTIVITY_TEAM_MEMBER_REMOVED: 'Member removed from team successfully',
+  ACTIVITY_TEAM_MEMBER_CAPTAIN_UPDATED: 'Team captain updated successfully',
+
+  ACTIVITY_TEAM_MEMBER_NOT_FOUND: 'Team member not found',
+  PARTICIPATION_ALREADY_IN_TEAM: 'This participant is already in a team',
+  PARTICIPATION_NOT_IN_ACTIVITY: 'Participation does not belong to this activity',
+
   // Participations success
   PARTICIPANT_ADDED: 'Participant added successfully',
   PARTICIPANT_ROLE_UPDATED: 'Participant role updated',
