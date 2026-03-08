@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 
 import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
@@ -22,6 +22,7 @@ export class ContactsService {
     private readonly externalContactRepository: Repository<ExternalContact>,
     @InjectRepository(UserProfile)
     private readonly userProfileRepository: Repository<UserProfile>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async add(dto: AddContactDto, ownerUser: User) {
@@ -133,7 +134,9 @@ export class ContactsService {
     });
 
     if (contacts.length > 0) {
-      await this.contactRepository.softRemove(contacts);
+      await this.dataSource.transaction(async (manager) => {
+        await manager.softRemove(contacts);
+      });
     }
 
     return { deletedCount: contacts.length };
@@ -212,13 +215,17 @@ export class ContactsService {
   async createContactForExternal(
     ownerUserId: string,
     externalContactId: string,
+    manager?: EntityManager,
   ): Promise<Contact> {
-    const contact = this.contactRepository.create({
+    const repo = manager
+      ? manager.getRepository(Contact)
+      : this.contactRepository;
+    const contact = repo.create({
       ownerUserId,
       userId: null,
       externalContactId,
     });
-    return this.contactRepository.save(contact);
+    return manager ? manager.save(contact) : this.contactRepository.save(contact);
   }
 
   private buildUserDisplayName(

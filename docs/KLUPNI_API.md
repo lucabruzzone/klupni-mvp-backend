@@ -17,8 +17,9 @@ Documentación completa de la API REST de Klupni para desarrolladores frontend.
 9. [Participaciones](#9-participaciones)
 10. [Contactos](#10-contactos)
 11. [Contactos externos](#11-contactos-externos)
-12. [Invitaciones](#12-invitaciones)
-13. [Catálogo de códigos API](#13-catálogo-de-códigos-api)
+12. [Equipos de actividad](#12-equipos-de-actividad)
+13. [Invitaciones](#13-invitaciones)
+14. [Catálogo de códigos API](#14-catálogo-de-códigos-api)
 
 ---
 
@@ -1210,7 +1211,265 @@ Elimina un contacto externo (soft delete). Solo propietario. **Requiere auth.**
 
 ---
 
-## 12. Invitaciones
+## 12. Equipos de actividad
+
+Los equipos permiten organizar participantes dentro de una actividad (ej. equipos para un partido). Solo el host puede gestionar equipos.
+
+### `POST /api/activities/:activityId/teams`
+
+Crea un equipo en una actividad. **Requiere auth.** Solo host.
+
+**Request:**
+```json
+{
+  "name": "string",
+  "color": "string",
+  "photoUrl": "string",
+  "displayOrder": "number"
+}
+```
+- `name`: 1-100 caracteres (requerido)
+- `color`: opcional, hex válido (ej. `#3B82F6`)
+- `photoUrl`: opcional, max 500 caracteres
+- `displayOrder`: opcional, entero para ordenar equipos
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_CREATED",
+  "message": "Team created successfully",
+  "data": {
+    "id": "uuid",
+    "activityId": "uuid",
+    "name": "string",
+    "color": "string | null",
+    "photoUrl": "string | null",
+    "displayOrder": "number | null",
+    "createdAt": "string",
+    "updatedAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Response 403:** `ACTIVITY_MODIFY_FORBIDDEN`. **Response 404:** `ACTIVITY_NOT_FOUND`.
+
+---
+
+### `GET /api/activities/:activityId/teams`
+
+Lista equipos de una actividad. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_LIST_RETRIEVED",
+  "message": "Teams list retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "activityId": "uuid",
+      "name": "string",
+      "color": "string | null",
+      "photoUrl": "string | null",
+      "displayOrder": "number | null",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "meta": null
+}
+```
+Ordenados por `displayOrder` ASC, luego por `createdAt`.
+
+---
+
+### `GET /api/activities/:activityId/teams/:teamId`
+
+Obtiene un equipo. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_RETRIEVED",
+  "message": "Team retrieved",
+  "data": {
+    "id": "uuid",
+    "activityId": "uuid",
+    "name": "string",
+    "color": "string | null",
+    "photoUrl": "string | null",
+    "displayOrder": "number | null",
+    "createdAt": "string",
+    "updatedAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Response 404:** `ACTIVITY_TEAM_NOT_FOUND`.
+
+---
+
+### `GET /api/activities/:activityId/teams/:teamId/members`
+
+Lista participantes de un equipo. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_MEMBERS_LIST_RETRIEVED",
+  "message": "Team members list retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "teamId": "uuid",
+      "activityParticipationId": "uuid",
+      "isCaptain": "boolean",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "participant": {
+        "type": "user | external_contact | free",
+        "displayName": "string | null",
+        "avatarUrl": "string | null",
+        "userId": "uuid | null",
+        "externalContactId": "uuid | null"
+      }
+    }
+  ],
+  "meta": null
+}
+```
+Capitán primero, luego por fecha de incorporación.
+
+---
+
+### `PATCH /api/activities/:activityId/teams/:teamId`
+
+Actualiza un equipo. **Requiere auth.** Solo host.
+
+**Request** (todos opcionales):
+```json
+{
+  "name": "string",
+  "color": "string | null",
+  "photoUrl": "string",
+  "displayOrder": "number"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_UPDATED",
+  "message": "Team updated successfully",
+  "data": { ... },
+  "meta": null
+}
+```
+
+---
+
+### `POST /api/activities/:activityId/teams/:teamId/members`
+
+Agrega un participante al equipo. **Requiere auth.** Solo host.
+
+**Request:**
+```json
+{
+  "activityParticipationId": "uuid",
+  "isCaptain": "boolean"
+}
+```
+- `activityParticipationId`: participante activo de la actividad
+- `isCaptain`: opcional, si `true` lo designa capitán (solo uno por equipo)
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_MEMBER_ADDED",
+  "message": "Member added to team successfully",
+  "data": {
+    "id": "uuid",
+    "teamId": "uuid",
+    "activityParticipationId": "uuid",
+    "isCaptain": "boolean",
+    "createdAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Response 400:** `PARTICIPATION_NOT_IN_ACTIVITY`. **Response 404:** `ACTIVITY_TEAM_NOT_FOUND`. **Response 409:** `PARTICIPATION_ALREADY_IN_TEAM`.
+
+---
+
+### `PATCH /api/activities/:activityId/teams/:teamId/members/:memberId/captain`
+
+Designa a un miembro como capitán. Solo uno por equipo; al promover a otro, el anterior deja de ser capitán. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_MEMBER_CAPTAIN_UPDATED",
+  "message": "Team captain updated successfully",
+  "data": {
+    "id": "uuid",
+    "teamId": "uuid",
+    "activityParticipationId": "uuid",
+    "isCaptain": "boolean",
+    "updatedAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Response 404:** `ACTIVITY_TEAM_NOT_FOUND`, `ACTIVITY_TEAM_MEMBER_NOT_FOUND`.
+
+---
+
+### `DELETE /api/activities/:activityId/teams/:teamId/members/:memberId`
+
+Quita un participante del equipo. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_MEMBER_REMOVED",
+  "message": "Member removed from team successfully",
+  "data": null,
+  "meta": null
+}
+```
+
+---
+
+### `DELETE /api/activities/:activityId/teams/:teamId`
+
+Elimina un equipo y todos sus miembros. **Requiere auth.** Solo host.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "ACTIVITY_TEAM_DELETED",
+  "message": "Team deleted successfully",
+  "data": null,
+  "meta": null
+}
+```
+
+---
+
+## 13. Invitaciones
 
 ### `POST /api/activities/:activityId/invitations`
 
@@ -1485,7 +1744,7 @@ Acepta una invitación. Usado desde el link del email. **Público.**
 
 ---
 
-## 13. Catálogo de códigos API
+## 14. Catálogo de códigos API
 
 Referencia de todos los códigos que puede devolver la API. El frontend puede usarlos para lógica condicional (ej. `if (response.code === 'USERNAME_TAKEN')`).
 
@@ -1528,6 +1787,12 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 | `EXTERNAL_CONTACT_CREATED`, `EXTERNAL_CONTACT_LIST_RETRIEVED`, `EXTERNAL_CONTACT_RETRIEVED`, `EXTERNAL_CONTACT_UPDATED`, `EXTERNAL_CONTACT_DELETED` | éxito |
 | `EXTERNAL_CONTACT_NOT_FOUND` | error |
 
+### Equipos de actividad
+| Código | Tipo |
+|--------|------|
+| `ACTIVITY_TEAM_CREATED`, `ACTIVITY_TEAM_LIST_RETRIEVED`, `ACTIVITY_TEAM_RETRIEVED`, `ACTIVITY_TEAM_MEMBERS_LIST_RETRIEVED`, `ACTIVITY_TEAM_UPDATED`, `ACTIVITY_TEAM_DELETED`, `ACTIVITY_TEAM_MEMBER_ADDED`, `ACTIVITY_TEAM_MEMBER_REMOVED`, `ACTIVITY_TEAM_MEMBER_CAPTAIN_UPDATED` | éxito |
+| `ACTIVITY_TEAM_NOT_FOUND`, `ACTIVITY_TEAM_MEMBER_NOT_FOUND`, `PARTICIPATION_ALREADY_IN_TEAM`, `PARTICIPATION_NOT_IN_ACTIVITY` | error |
+
 ### Invitaciones
 | Código | Tipo |
 |--------|------|
@@ -1560,6 +1825,15 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 | GET | `/activities/:id/participants` | ✓ | Listar participantes |
 | PATCH | `/activities/:id` | ✓ | Actualizar actividad |
 | DELETE | `/activities/:id` | ✓ | Eliminar actividad |
+| POST | `/activities/:activityId/teams` | ✓ | Crear equipo |
+| GET | `/activities/:activityId/teams` | ✓ | Listar equipos |
+| GET | `/activities/:activityId/teams/:teamId` | ✓ | Obtener equipo |
+| GET | `/activities/:activityId/teams/:teamId/members` | ✓ | Listar miembros del equipo |
+| PATCH | `/activities/:activityId/teams/:teamId` | ✓ | Actualizar equipo |
+| POST | `/activities/:activityId/teams/:teamId/members` | ✓ | Agregar miembro al equipo |
+| PATCH | `/activities/:activityId/teams/:teamId/members/:memberId/captain` | ✓ | Designar capitán |
+| DELETE | `/activities/:activityId/teams/:teamId/members/:memberId` | ✓ | Quitar miembro del equipo |
+| DELETE | `/activities/:activityId/teams/:teamId` | ✓ | Eliminar equipo |
 | POST | `/activities/:activityId/participations` | ✓ | Agregar participante (sin invitación) |
 | POST | `/activities/:activityId/participations/free` | ✓ | Agregar participante libre |
 | PATCH | `/activities/:activityId/participations/:id/role` | ✓ | Cambiar rol |

@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from '../../common/utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 
 import { User } from '../auth/entities/user.entity';
 import { UserProfile } from '../auth/entities/user-profile.entity';
@@ -28,6 +28,7 @@ export class ActivityTeamsService {
     private readonly teamMemberRepository: Repository<ActivityTeamMember>,
     @InjectRepository(UserProfile)
     private readonly userProfileRepository: Repository<UserProfile>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(activityId: string, dto: CreateActivityTeamDto, user: User) {
@@ -278,19 +279,20 @@ export class ActivityTeamsService {
       );
     }
 
-    if (dto.isCaptain) {
-      await this.teamMemberRepository.update(
-        { teamId },
-        { isCaptain: false },
-      );
-    }
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const memberRepo = manager.getRepository(ActivityTeamMember);
 
-    const member = this.teamMemberRepository.create({
-      teamId,
-      activityParticipationId: dto.activityParticipationId,
-      isCaptain: dto.isCaptain ?? false,
+      if (dto.isCaptain) {
+        await memberRepo.update({ teamId }, { isCaptain: false });
+      }
+
+      const member = memberRepo.create({
+        teamId,
+        activityParticipationId: dto.activityParticipationId,
+        isCaptain: dto.isCaptain ?? false,
+      });
+      return manager.save(member);
     });
-    const saved = await this.teamMemberRepository.save(member);
 
     return {
       id: saved.id,
@@ -352,23 +354,25 @@ export class ActivityTeamsService {
       );
     }
 
-    const member = await this.teamMemberRepository.findOne({
-      where: { id: memberId, teamId },
-    });
-    if (!member) {
-      throw new ApiException(
-        ApiCodes.ACTIVITY_TEAM_MEMBER_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const memberRepo = manager.getRepository(ActivityTeamMember);
+      const member = await memberRepo.findOne({
+        where: { id: memberId, teamId },
+      });
+      if (!member) {
+        throw new ApiException(
+          ApiCodes.ACTIVITY_TEAM_MEMBER_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      await memberRepo.update(
+        { teamId, isCaptain: true },
+        { isCaptain: false },
       );
-    }
-
-    await this.teamMemberRepository.update(
-      { teamId, isCaptain: true },
-      { isCaptain: false },
-    );
-
-    member.isCaptain = true;
-    const saved = await this.teamMemberRepository.save(member);
+      member.isCaptain = true;
+      return manager.save(member);
+    });
 
     return {
       id: saved.id,

@@ -170,45 +170,48 @@ export class InvitationsService {
     const token = uuidv4();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + INVITATION_EXPIRY_HOURS);
-
-    const invitation = this.invitationRepository.create({
-      activityId,
-      invitedByUserId: hostUser.id,
-      userId: invitedUserId,
-      externalContactId: invitedExternalContactId,
-      email: targetEmail,
-      token,
-      status: 'pending',
-      expiresAt,
-      respondedAt: null,
-    });
-
-    const saved = await this.invitationRepository.save(invitation);
-
     const invitationDate = new Date();
-    const existingParticipation = await this.participationRepository.findOne({
-      where: invitedUserId
-        ? { activityId, userId: invitedUserId }
-        : { activityId, externalContactId: invitedExternalContactId! },
-    });
-    if (!existingParticipation) {
-      const participation = this.participationRepository.create({
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const invitation = manager.create(ActivityInvitation, {
         activityId,
+        invitedByUserId: hostUser.id,
         userId: invitedUserId,
         externalContactId: invitedExternalContactId,
-        role: 'participant',
-        status: 'active',
-        joinedAt: invitationDate,
-        confirmedAt: null,
+        email: targetEmail,
+        token,
+        status: 'pending',
+        expiresAt,
+        respondedAt: null,
       });
-      await this.participationRepository.save(participation);
-    } else if (existingParticipation.status !== 'active') {
-      existingParticipation.status = 'active';
-      existingParticipation.role = 'participant';
-      existingParticipation.joinedAt = invitationDate;
-      existingParticipation.confirmedAt = null;
-      await this.participationRepository.save(existingParticipation);
-    }
+      const savedInv = await manager.save(invitation);
+
+      const existingParticipation = await manager.findOne(ActivityParticipation, {
+        where: invitedUserId
+          ? { activityId, userId: invitedUserId }
+          : { activityId, externalContactId: invitedExternalContactId! },
+      });
+      if (!existingParticipation) {
+        const participation = manager.create(ActivityParticipation, {
+          activityId,
+          userId: invitedUserId,
+          externalContactId: invitedExternalContactId,
+          role: 'participant',
+          status: 'active',
+          joinedAt: invitationDate,
+          confirmedAt: null,
+        });
+        await manager.save(participation);
+      } else if (existingParticipation.status !== 'active') {
+        existingParticipation.status = 'active';
+        existingParticipation.role = 'participant';
+        existingParticipation.joinedAt = invitationDate;
+        existingParticipation.confirmedAt = null;
+        await manager.save(existingParticipation);
+      }
+
+      return savedInv;
+    });
 
     await this.mailService.sendActivityInvitation({
       to: targetEmail,
@@ -373,50 +376,59 @@ export class InvitationsService {
 
     // ── Create invitations and send emails ─────────────────────────────────────
 
-    const created: { id: string; email: string; userId?: string; externalContactId?: string; status: string; expiresAt: Date }[] = [];
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + INVITATION_EXPIRY_HOURS);
-
     const invitationDate = new Date();
-    for (const target of targets) {
-      const token = uuidv4();
-      const invitation = this.invitationRepository.create({
-        activityId,
-        invitedByUserId: hostUser.id,
-        userId: target.userId ?? null,
-        externalContactId: target.externalContactId ?? null,
-        email: target.email,
-        token,
-        status: 'pending',
-        expiresAt,
-        respondedAt: null,
-      });
-      const saved = await this.invitationRepository.save(invitation);
 
-      const existingParticipation = await this.participationRepository.findOne({
-        where: target.userId
-          ? { activityId, userId: target.userId }
-          : { activityId, externalContactId: target.externalContactId },
-      });
-      if (!existingParticipation) {
-        const participation = this.participationRepository.create({
+    const createdData = await this.dataSource.transaction(async (manager) => {
+      const results: { saved: ActivityInvitation; token: string }[] = [];
+      for (const target of targets) {
+        const token = uuidv4();
+        const invitation = manager.create(ActivityInvitation, {
           activityId,
+          invitedByUserId: hostUser.id,
           userId: target.userId ?? null,
           externalContactId: target.externalContactId ?? null,
-          role: 'participant',
-          status: 'active',
-          joinedAt: invitationDate,
-          confirmedAt: null,
+          email: target.email,
+          token,
+          status: 'pending',
+          expiresAt,
+          respondedAt: null,
         });
-        await this.participationRepository.save(participation);
-      } else if (existingParticipation.status !== 'active') {
-        existingParticipation.status = 'active';
-        existingParticipation.role = 'participant';
-        existingParticipation.joinedAt = invitationDate;
-        existingParticipation.confirmedAt = null;
-        await this.participationRepository.save(existingParticipation);
-      }
+        const saved = await manager.save(invitation);
 
+        const existingParticipation = await manager.findOne(ActivityParticipation, {
+          where: target.userId
+            ? { activityId, userId: target.userId }
+            : { activityId, externalContactId: target.externalContactId },
+        });
+        if (!existingParticipation) {
+          const participation = manager.create(ActivityParticipation, {
+            activityId,
+            userId: target.userId ?? null,
+            externalContactId: target.externalContactId ?? null,
+            role: 'participant',
+            status: 'active',
+            joinedAt: invitationDate,
+            confirmedAt: null,
+          });
+          await manager.save(participation);
+        } else if (existingParticipation.status !== 'active') {
+          existingParticipation.status = 'active';
+          existingParticipation.role = 'participant';
+          existingParticipation.joinedAt = invitationDate;
+          existingParticipation.confirmedAt = null;
+          await manager.save(existingParticipation);
+        }
+
+        results.push({ saved, token });
+      }
+      return results;
+    });
+
+    for (let i = 0; i < createdData.length; i++) {
+      const { token } = createdData[i];
+      const target = targets[i];
       await this.mailService.sendActivityInvitation({
         to: target.email,
         invitedByEmail: hostUser.email,
@@ -425,16 +437,16 @@ export class InvitationsService {
         locationText: activity.activityOpen.locationText,
         token,
       });
-
-      created.push({
-        id: saved.id,
-        email: saved.email,
-        userId: saved.userId ?? undefined,
-        externalContactId: saved.externalContactId ?? undefined,
-        status: saved.status,
-        expiresAt: saved.expiresAt,
-      });
     }
+
+    const created = createdData.map(({ saved }) => ({
+      id: saved.id,
+      email: saved.email,
+      userId: saved.userId ?? undefined,
+      externalContactId: saved.externalContactId ?? undefined,
+      status: saved.status,
+      expiresAt: saved.expiresAt,
+    }));
 
     return {
       created,

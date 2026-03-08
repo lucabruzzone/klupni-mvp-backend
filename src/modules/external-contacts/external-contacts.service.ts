@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
@@ -17,19 +17,25 @@ export class ExternalContactsService {
     @InjectRepository(ExternalContact)
     private readonly externalContactRepository: Repository<ExternalContact>,
     private readonly contactsService: ContactsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateExternalContactDto, user: User) {
-    const contact = this.externalContactRepository.create({
-      ownerUserId: user.id,
-      alias: dto.alias,
-      email: dto.email ?? null,
-      phoneNumber: dto.phoneNumber ?? null,
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const contact = manager.create(ExternalContact, {
+        ownerUserId: user.id,
+        alias: dto.alias,
+        email: dto.email ?? null,
+        phoneNumber: dto.phoneNumber ?? null,
+      });
+      const savedContact = await manager.save(contact);
+      await this.contactsService.createContactForExternal(
+        user.id,
+        savedContact.id,
+        manager,
+      );
+      return savedContact;
     });
-
-    const saved = await this.externalContactRepository.save(contact);
-
-    await this.contactsService.createContactForExternal(user.id, saved.id);
 
     return {
       id: saved.id,

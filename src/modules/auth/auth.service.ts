@@ -131,23 +131,26 @@ export class AuthService {
       throw new ApiException(ApiCodes.EMAIL_ALREADY_VERIFIED);
     }
 
-    await this.verificationTokenRepository
-      .createQueryBuilder()
-      .delete()
-      .where('user_id = :userId', { userId: user.id })
-      .andWhere('used_at IS NULL')
-      .execute();
-
     const token = uuidv4();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + VERIFICATION_TOKEN_HOURS);
 
-    const verificationToken = this.verificationTokenRepository.create({
-      userId: user.id,
-      token,
-      expiresAt,
+    await this.dataSource.transaction(async (manager) => {
+      await manager
+        .getRepository(EmailVerificationToken)
+        .createQueryBuilder()
+        .delete()
+        .where('user_id = :userId', { userId: user.id })
+        .andWhere('used_at IS NULL')
+        .execute();
+
+      const verificationToken = manager.create(EmailVerificationToken, {
+        userId: user.id,
+        token,
+        expiresAt,
+      });
+      await manager.save(verificationToken);
     });
-    await this.verificationTokenRepository.save(verificationToken);
 
     await this.mailService.sendVerificationEmail(user.email, token);
 
@@ -173,23 +176,26 @@ export class AuthService {
       };
     }
 
-    await this.passwordResetTokenRepository
-      .createQueryBuilder()
-      .delete()
-      .where('user_id = :userId', { userId: user.id })
-      .andWhere('used_at IS NULL')
-      .execute();
-
     const token = uuidv4();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + PASSWORD_RESET_TOKEN_HOURS);
 
-    const resetToken = this.passwordResetTokenRepository.create({
-      userId: user.id,
-      token,
-      expiresAt,
+    await this.dataSource.transaction(async (manager) => {
+      await manager
+        .getRepository(PasswordResetToken)
+        .createQueryBuilder()
+        .delete()
+        .where('user_id = :userId', { userId: user.id })
+        .andWhere('used_at IS NULL')
+        .execute();
+
+      const resetToken = manager.create(PasswordResetToken, {
+        userId: user.id,
+        token,
+        expiresAt,
+      });
+      await manager.save(resetToken);
     });
-    await this.passwordResetTokenRepository.save(resetToken);
 
     await this.mailService.sendPasswordResetEmail(user.email, token);
 

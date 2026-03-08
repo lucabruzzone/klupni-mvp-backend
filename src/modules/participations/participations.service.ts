@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from '../../common/utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { User } from '../auth/entities/user.entity';
 import { Activity } from '../activities/entities/activity.entity';
@@ -33,6 +33,7 @@ export class ParticipationsService {
     private readonly invitationRepository: Repository<ActivityInvitation>,
     @InjectRepository(ActivityTeamMember)
     private readonly teamMemberRepository: Repository<ActivityTeamMember>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async addParticipant(
@@ -282,11 +283,30 @@ export class ParticipationsService {
       throw new ApiException(ApiCodes.CANNOT_REMOVE_HOST);
     }
 
-    participation.status = 'removed';
-    await this.participationRepository.save(participation);
+    await this.dataSource.transaction(async (manager) => {
+      participation.status = 'removed';
+      await manager.save(participation);
 
-    await this.removeFromTeams(participation.id);
-    await this.cancelInvitationsForParticipant(activityId, participation.userId, participation.externalContactId);
+      await manager
+        .getRepository(ActivityTeamMember)
+        .delete({ activityParticipationId: participation.id });
+
+      const invRepo = manager.getRepository(ActivityInvitation);
+      const qb = invRepo
+        .createQueryBuilder()
+        .update(ActivityInvitation)
+        .set({ status: 'cancelled' })
+        .where('activity_id = :activityId', { activityId })
+        .andWhere('status = :status', { status: 'pending' });
+      if (participation.userId) {
+        qb.andWhere('user_id = :userId', { userId: participation.userId });
+      } else {
+        qb.andWhere('external_contact_id = :externalContactId', {
+          externalContactId: participation.externalContactId!,
+        });
+      }
+      await qb.execute();
+    });
 
     return { message: 'Participant removed successfully' };
   }
@@ -318,11 +338,30 @@ export class ParticipationsService {
       }
     }
 
-    participation.status = 'left';
-    await this.participationRepository.save(participation);
+    await this.dataSource.transaction(async (manager) => {
+      participation.status = 'left';
+      await manager.save(participation);
 
-    await this.removeFromTeams(participation.id);
-    await this.cancelInvitationsForParticipant(activityId, participation.userId, participation.externalContactId);
+      await manager
+        .getRepository(ActivityTeamMember)
+        .delete({ activityParticipationId: participation.id });
+
+      const invRepo = manager.getRepository(ActivityInvitation);
+      const qb = invRepo
+        .createQueryBuilder()
+        .update(ActivityInvitation)
+        .set({ status: 'cancelled' })
+        .where('activity_id = :activityId', { activityId })
+        .andWhere('status = :status', { status: 'pending' });
+      if (participation.userId) {
+        qb.andWhere('user_id = :userId', { userId: participation.userId });
+      } else {
+        qb.andWhere('external_contact_id = :externalContactId', {
+          externalContactId: participation.externalContactId!,
+        });
+      }
+      await qb.execute();
+    });
 
     return { message: 'You have left the activity' };
   }
