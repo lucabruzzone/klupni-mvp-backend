@@ -15,6 +15,7 @@ import { ResponseFactory } from '../../common/factories/response.factory';
 import { User } from '../auth/entities/user.entity';
 import { ParticipationsService } from './participations.service';
 import { AddFreeParticipantDto } from './dto/add-free-participant.dto';
+import { AddParticipantDto } from './dto/add-participant.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Controller('activities/:activityId/participations')
@@ -28,6 +29,20 @@ export class ParticipationsController {
     @CurrentUser() user: User,
   ) {
     const result = await this.participationsService.addFreeParticipant(
+      activityId,
+      dto,
+      user,
+    );
+    return ResponseFactory.created(ApiCodes.PARTICIPANT_ADDED, result);
+  }
+
+  @Post()
+  async addParticipant(
+    @Param('activityId') activityId: string,
+    @Body() dto: AddParticipantDto,
+    @CurrentUser() user: User,
+  ) {
+    const result = await this.participationsService.addParticipant(
       activityId,
       dto,
       user,

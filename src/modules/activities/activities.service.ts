@@ -61,6 +61,7 @@ export class ActivitiesService {
         role: 'host',
         status: 'active',
         joinedAt: new Date(),
+        confirmedAt: new Date(),
       });
       await manager.save(participation);
 
@@ -220,6 +221,7 @@ export class ActivitiesService {
       id: p.id,
       role: p.role,
       joinedAt: p.joinedAt,
+      confirmedAt: p.confirmedAt,
       ...(p.userId
         ? { user: { userId: p.userId, email: p.user?.email ?? null } }
         : {
@@ -328,141 +330,115 @@ export class ActivitiesService {
     const filter = query.status ?? 'all';
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
-    const result: Array<{
-      type: 'user' | 'external_contact' | 'free' | 'invited';
-      participationId: string | null;
-      invitationId: string | null;
-      role: string | null;
-      status: string;
-      displayName: string | null;
-      avatarUrl: string | null;
-      userId: string | null;
-      externalContactId: string | null;
-    }> = [];
 
-    if (filter === 'confirmed' || filter === 'all') {
-      const participations = await this.participationRepository.find({
-        where: { activityId, status: 'active' },
-        relations: ['user', 'externalContact'],
-        order: { joinedAt: 'ASC' },
-      });
+    const qb = this.participationRepository
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.user', 'u')
+      .leftJoinAndSelect('p.externalContact', 'ec')
+      .where('p.activity_id = :activityId', { activityId })
+      .andWhere('p.status = :activeStatus', { activeStatus: 'active' })
+      .andWhere('p.deleted_at IS NULL');
 
-      const userIds = participations
-        .filter((p) => p.userId)
-        .map((p) => p.userId!);
+    if (filter === 'confirmed') {
+      qb.andWhere('p.confirmed_at IS NOT NULL');
+    } else if (filter === 'unconfirmed') {
+      qb.andWhere('p.confirmed_at IS NULL');
+    }
 
-      const profiles = userIds.length > 0
+    const [participations, total] = await qb
+      .orderBy('p.joinedAt', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const userIds = participations
+      .filter((p) => p.userId)
+      .map((p) => p.userId!);
+
+    const profiles =
+      userIds.length > 0
         ? await this.userProfileRepository
             .createQueryBuilder('up')
             .where('up.userId IN (:...userIds)', { userIds })
             .getMany()
         : [];
 
-      const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
 
-      for (const p of participations) {
-        if (p.userId) {
-          const profile = profileMap.get(p.userId);
-          const name = [profile?.firstName, profile?.lastName]
-            .filter(Boolean)
-            .join(' ') || profile?.username || p.user?.email || null;
+    const now = new Date();
+    const pendingInvitations = await this.invitationRepository.find({
+      where: { activityId, status: 'pending' },
+      select: ['userId', 'externalContactId', 'expiresAt'],
+    });
 
-          result.push({
-            type: 'user',
-            participationId: p.id,
-            invitationId: null,
-            role: p.role,
-            status: 'confirmed',
-            displayName: name,
-            avatarUrl: profile?.avatarUrl ?? null,
-            userId: p.userId,
-            externalContactId: null,
-          });
-        } else if (p.externalContactId) {
-          result.push({
-            type: 'external_contact',
-            participationId: p.id,
-            invitationId: null,
-            role: p.role,
-            status: 'confirmed',
-            displayName: p.externalContact?.alias ?? null,
-            avatarUrl: null,
-            userId: null,
-            externalContactId: p.externalContactId,
-          });
-        } else {
-          result.push({
-            type: 'free',
-            participationId: p.id,
-            invitationId: null,
-            role: p.role,
-            status: 'confirmed',
-            displayName: p.alias,
-            avatarUrl: null,
-            userId: null,
-            externalContactId: null,
-          });
-        }
+    const hasInvitationByUser = new Set(
+      pendingInvitations
+        .filter((i) => i.userId != null && i.expiresAt > now)
+        .map((i) => i.userId!),
+    );
+    const hasInvitationByExternal = new Set(
+      pendingInvitations
+        .filter((i) => i.externalContactId != null && i.expiresAt > now)
+        .map((i) => i.externalContactId!),
+    );
+
+    const data = participations.map((p) => {
+      const hasPendingInvitation = p.userId
+        ? hasInvitationByUser.has(p.userId)
+        : p.externalContactId
+          ? hasInvitationByExternal.has(p.externalContactId)
+          : false;
+
+      if (p.userId) {
+        const profile = profileMap.get(p.userId);
+        const displayName =
+          [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') ||
+          profile?.username ||
+          p.user?.email ||
+          null;
+
+        return {
+          type: 'user' as const,
+          participationId: p.id,
+          role: p.role,
+          status: p.status,
+          confirmedAt: p.confirmedAt,
+          hasPendingInvitation,
+          displayName,
+          avatarUrl: profile?.avatarUrl ?? null,
+          userId: p.userId,
+          externalContactId: null,
+        };
       }
-    }
 
-    if (filter === 'pending' || filter === 'all') {
-      const pendingInvitations = await this.invitationRepository.find({
-        where: { activityId, status: 'pending' },
-        relations: ['user', 'externalContact'],
-        order: { createdAt: 'ASC' },
-      });
-
-      const invUserIds = pendingInvitations
-        .filter((inv) => inv.userId)
-        .map((inv) => inv.userId!);
-
-      const invProfiles = invUserIds.length > 0
-        ? await this.userProfileRepository
-            .createQueryBuilder('up')
-            .where('up.userId IN (:...invUserIds)', { invUserIds })
-            .getMany()
-        : [];
-
-      const invProfileMap = new Map(invProfiles.map((p) => [p.userId, p]));
-
-      for (const inv of pendingInvitations) {
-        if (inv.userId) {
-          const profile = invProfileMap.get(inv.userId);
-          const name = [profile?.firstName, profile?.lastName]
-            .filter(Boolean)
-            .join(' ') || profile?.username || inv.email || null;
-
-          result.push({
-            type: 'user',
-            participationId: null,
-            invitationId: inv.id,
-            role: null,
-            status: 'pending',
-            displayName: name,
-            avatarUrl: profile?.avatarUrl ?? null,
-            userId: inv.userId,
-            externalContactId: null,
-          });
-        } else if (inv.externalContactId) {
-          result.push({
-            type: 'external_contact',
-            participationId: null,
-            invitationId: inv.id,
-            role: null,
-            status: 'pending',
-            displayName: inv.externalContact?.alias ?? inv.email,
-            avatarUrl: null,
-            userId: null,
-            externalContactId: inv.externalContactId,
-          });
-        }
+      if (p.externalContactId) {
+        return {
+          type: 'external_contact' as const,
+          participationId: p.id,
+          role: p.role,
+          status: p.status,
+          confirmedAt: p.confirmedAt,
+          hasPendingInvitation,
+          displayName: p.externalContact?.alias ?? null,
+          avatarUrl: null,
+          userId: null,
+          externalContactId: p.externalContactId,
+        };
       }
-    }
 
-    const total = result.length;
-    const start = (page - 1) * limit;
-    const data = result.slice(start, start + limit);
+      return {
+        type: 'free' as const,
+        participationId: p.id,
+        role: p.role,
+        status: p.status,
+        confirmedAt: p.confirmedAt,
+        hasPendingInvitation: false,
+        displayName: p.alias,
+        avatarUrl: null,
+        userId: null,
+        externalContactId: null,
+      };
+    });
 
     return paginate(data, total, page, limit);
   }

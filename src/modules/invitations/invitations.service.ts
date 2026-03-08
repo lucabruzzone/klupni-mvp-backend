@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { assertActivityActive } from '../../common/utils/activity.utils';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import { User } from '../auth/entities/user.entity';
@@ -67,15 +67,15 @@ export class InvitationsService {
 
     assertActivityActive(activity);
 
-    const activeCount = await this.participationRepository.count({
-      where: { activityId, status: 'active' },
+    const confirmedCount = await this.participationRepository.count({
+      where: {
+        activityId,
+        status: 'active',
+        confirmedAt: Not(IsNull()),
+      },
     });
 
-    const pendingCount = await this.invitationRepository.count({
-      where: { activityId, status: 'pending' },
-    });
-
-    if (activeCount + pendingCount >= activity.activityOpen.maxParticipants) {
+    if (confirmedCount >= activity.activityOpen.maxParticipants) {
       throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
     }
 
@@ -84,6 +84,7 @@ export class InvitationsService {
     let targetEmail: string;
     let invitedUserId: string | null = null;
     let invitedExternalContactId: string | null = null;
+    let hasExistingParticipation = false;
 
     if (dto.userId) {
       const invitedUser = await this.userRepository.findOne({
@@ -98,14 +99,6 @@ export class InvitationsService {
         throw new ApiException(ApiCodes.INVITATION_CANNOT_INVITE_SELF);
       }
 
-      const alreadyParticipating = await this.participationRepository.findOne({
-        where: { activityId, userId: invitedUser.id, status: 'active' },
-      });
-
-      if (alreadyParticipating) {
-        throw new ApiException(ApiCodes.INVITATION_USER_ALREADY_PARTICIPANT);
-      }
-
       const existingPending = await this.invitationRepository.findOne({
         where: { activityId, userId: invitedUser.id, status: 'pending' },
       });
@@ -114,6 +107,15 @@ export class InvitationsService {
         throw new ApiException(ApiCodes.INVITATION_ALREADY_PENDING);
       }
 
+      const existingParticipation = await this.participationRepository.findOne({
+        where: { activityId, userId: invitedUser.id },
+      });
+
+      if (existingParticipation?.status === 'active' && existingParticipation?.confirmedAt != null) {
+        throw new ApiException(ApiCodes.INVITATION_USER_ALREADY_PARTICIPANT);
+      }
+
+      hasExistingParticipation = !!existingParticipation;
       targetEmail = invitedUser.email;
       invitedUserId = invitedUser.id;
     } else {
@@ -129,18 +131,6 @@ export class InvitationsService {
         throw new ApiException(ApiCodes.INVITATION_EXTERNAL_CONTACT_NO_EMAIL);
       }
 
-      const alreadyParticipating = await this.participationRepository.findOne({
-        where: {
-          activityId,
-          externalContactId: contact.id,
-          status: 'active',
-        },
-      });
-
-      if (alreadyParticipating) {
-        throw new ApiException(ApiCodes.INVITATION_EXTERNAL_CONTACT_ALREADY_PARTICIPANT);
-      }
-
       const existingPending = await this.invitationRepository.findOne({
         where: {
           activityId,
@@ -153,8 +143,26 @@ export class InvitationsService {
         throw new ApiException(ApiCodes.INVITATION_ALREADY_PENDING);
       }
 
+      const existingParticipation = await this.participationRepository.findOne({
+        where: { activityId, externalContactId: contact.id },
+      });
+
+      if (existingParticipation?.status === 'active' && existingParticipation?.confirmedAt != null) {
+        throw new ApiException(ApiCodes.INVITATION_EXTERNAL_CONTACT_ALREADY_PARTICIPANT);
+      }
+
+      hasExistingParticipation = !!existingParticipation;
       targetEmail = contact.email;
       invitedExternalContactId = contact.id;
+    }
+
+    if (!hasExistingParticipation) {
+      const activeCount = await this.participationRepository.count({
+        where: { activityId, status: 'active' },
+      });
+      if (activeCount >= activity.activityOpen.maxParticipants) {
+        throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
+      }
     }
 
     // ── Create and send invitation ────────────────────────────────────────────
@@ -176,6 +184,31 @@ export class InvitationsService {
     });
 
     const saved = await this.invitationRepository.save(invitation);
+
+    const invitationDate = new Date();
+    const existingParticipation = await this.participationRepository.findOne({
+      where: invitedUserId
+        ? { activityId, userId: invitedUserId }
+        : { activityId, externalContactId: invitedExternalContactId! },
+    });
+    if (!existingParticipation) {
+      const participation = this.participationRepository.create({
+        activityId,
+        userId: invitedUserId,
+        externalContactId: invitedExternalContactId,
+        role: 'participant',
+        status: 'active',
+        joinedAt: invitationDate,
+        confirmedAt: null,
+      });
+      await this.participationRepository.save(participation);
+    } else if (existingParticipation.status !== 'active') {
+      existingParticipation.status = 'active';
+      existingParticipation.role = 'participant';
+      existingParticipation.joinedAt = invitationDate;
+      existingParticipation.confirmedAt = null;
+      await this.participationRepository.save(existingParticipation);
+    }
 
     await this.mailService.sendActivityInvitation({
       to: targetEmail,
@@ -230,11 +263,7 @@ export class InvitationsService {
       where: { activityId, status: 'active' },
     });
 
-    const pendingCount = await this.invitationRepository.count({
-      where: { activityId, status: 'pending' },
-    });
-
-    const targets: { email: string; userId?: string; externalContactId?: string }[] = [];
+    const targets: { email: string; userId?: string; externalContactId?: string; hasParticipation: boolean }[] = [];
     const failed: { userId?: string; externalContactId?: string; reason: string }[] = [];
 
     // ── Validate users ────────────────────────────────────────────────────────
@@ -254,14 +283,6 @@ export class InvitationsService {
         continue;
       }
 
-      const alreadyParticipating = await this.participationRepository.findOne({
-        where: { activityId, userId, status: 'active' },
-      });
-      if (alreadyParticipating) {
-        failed.push({ userId, reason: 'Already an active participant' });
-        continue;
-      }
-
       const existingPending = await this.invitationRepository.findOne({
         where: { activityId, userId, status: 'pending' },
       });
@@ -270,7 +291,15 @@ export class InvitationsService {
         continue;
       }
 
-      targets.push({ email: invitedUser.email, userId });
+      const existingParticipation = await this.participationRepository.findOne({
+        where: { activityId, userId },
+      });
+      if (existingParticipation?.status === 'active' && existingParticipation?.confirmedAt != null) {
+        failed.push({ userId, reason: 'Already a confirmed participant' });
+        continue;
+      }
+
+      targets.push({ email: invitedUser.email, userId, hasParticipation: !!existingParticipation });
     }
 
     // ── Validate external contacts ─────────────────────────────────────────────
@@ -296,21 +325,6 @@ export class InvitationsService {
         continue;
       }
 
-      const alreadyParticipating = await this.participationRepository.findOne({
-        where: {
-          activityId,
-          externalContactId,
-          status: 'active',
-        },
-      });
-      if (alreadyParticipating) {
-        failed.push({
-          externalContactId,
-          reason: 'Already an active participant',
-        });
-        continue;
-      }
-
       const existingPending = await this.invitationRepository.findOne({
         where: {
           activityId,
@@ -326,9 +340,21 @@ export class InvitationsService {
         continue;
       }
 
+      const existingParticipation = await this.participationRepository.findOne({
+        where: { activityId, externalContactId },
+      });
+      if (existingParticipation?.status === 'active' && existingParticipation?.confirmedAt != null) {
+        failed.push({
+          externalContactId,
+          reason: 'Already a confirmed participant',
+        });
+        continue;
+      }
+
       targets.push({
         email: contact.email,
         externalContactId,
+        hasParticipation: !!existingParticipation,
       });
     }
 
@@ -340,7 +366,8 @@ export class InvitationsService {
       };
     }
 
-    if (activeCount + pendingCount + targets.length > activity.activityOpen.maxParticipants) {
+    const newParticipantCount = targets.filter((t) => !t.hasParticipation).length;
+    if (activeCount + newParticipantCount > activity.activityOpen.maxParticipants) {
       throw new ApiException(ApiCodes.INVITATION_ACTIVITY_FULL);
     }
 
@@ -350,6 +377,7 @@ export class InvitationsService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + INVITATION_EXPIRY_HOURS);
 
+    const invitationDate = new Date();
     for (const target of targets) {
       const token = uuidv4();
       const invitation = this.invitationRepository.create({
@@ -364,6 +392,30 @@ export class InvitationsService {
         respondedAt: null,
       });
       const saved = await this.invitationRepository.save(invitation);
+
+      const existingParticipation = await this.participationRepository.findOne({
+        where: target.userId
+          ? { activityId, userId: target.userId }
+          : { activityId, externalContactId: target.externalContactId },
+      });
+      if (!existingParticipation) {
+        const participation = this.participationRepository.create({
+          activityId,
+          userId: target.userId ?? null,
+          externalContactId: target.externalContactId ?? null,
+          role: 'participant',
+          status: 'active',
+          joinedAt: invitationDate,
+          confirmedAt: null,
+        });
+        await this.participationRepository.save(participation);
+      } else if (existingParticipation.status !== 'active') {
+        existingParticipation.status = 'active';
+        existingParticipation.role = 'participant';
+        existingParticipation.joinedAt = invitationDate;
+        existingParticipation.confirmedAt = null;
+        await this.participationRepository.save(existingParticipation);
+      }
 
       await this.mailService.sendActivityInvitation({
         to: target.email,
@@ -607,7 +659,11 @@ export class InvitationsService {
     }
 
     const activeCount = await this.participationRepository.count({
-      where: { activityId: activity.id, status: 'active' },
+      where: {
+        activityId: activity.id,
+        status: 'active',
+        confirmedAt: Not(IsNull()),
+      },
     });
 
     if (activeCount >= activity.activityOpen.maxParticipants) {
@@ -615,33 +671,18 @@ export class InvitationsService {
     }
 
     await this.dataSource.transaction(async (manager) => {
-      // Always one of userId or externalContactId is set — never both null.
-      const existing = await manager.findOne(ActivityParticipation, {
+      const participation = await manager.findOne(ActivityParticipation, {
         where: invitation.userId
-          ? { activityId: activity.id, userId: invitation.userId }
-          : { activityId: activity.id, externalContactId: invitation.externalContactId! },
+          ? { activityId: activity.id, userId: invitation.userId, status: 'active' }
+          : { activityId: activity.id, externalContactId: invitation.externalContactId!, status: 'active' },
       });
 
-      if (existing && existing.status === 'active') {
-        throw new ApiException(ApiCodes.INVITATION_INVITEE_ALREADY_PARTICIPANT);
+      if (!participation) {
+        throw new ApiException(ApiCodes.INVITATION_INVALID);
       }
 
-      if (existing) {
-        existing.status = 'active';
-        existing.role = 'participant';
-        existing.joinedAt = new Date();
-        await manager.save(existing);
-      } else {
-        const participation = manager.create(ActivityParticipation, {
-          activityId: activity.id,
-          userId: invitation.userId,
-          externalContactId: invitation.externalContactId,
-          role: 'participant',
-          status: 'active',
-          joinedAt: new Date(),
-        });
-        await manager.save(participation);
-      }
+      participation.confirmedAt = new Date();
+      await manager.save(participation);
 
       invitation.status = 'accepted';
       invitation.respondedAt = new Date();

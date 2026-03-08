@@ -162,7 +162,7 @@ export class AuthController {
     @Query('excludeUserId') excludeUserId?: string,
   ) {
     const result = await this.authService.checkUsernameAvailable(username, excludeUserId);
-    return ResponseFactory.ok(ApiCodes.USERNAME_AVAILABLE, result);
+    return ResponseFactory.ok(ApiCodes.USERNAME_CHECK_RESULT, result);
   }
 
   @Get('users/search')

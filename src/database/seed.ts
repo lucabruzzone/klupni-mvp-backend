@@ -19,12 +19,6 @@ const daysFromNow = (n: number) => {
   return d;
 };
 
-const hoursFromNow = (n: number) => {
-  const d = new Date();
-  d.setHours(d.getHours() + n);
-  return d;
-};
-
 // ── IDs ────────────────────────────────────────────────────────────────────
 
 const U = {
@@ -92,6 +86,7 @@ async function seed() {
         activity_participations,
         activity_open,
         activities,
+        contacts,
         external_contacts,
         email_verification_tokens,
         password_reset_tokens,
@@ -159,6 +154,17 @@ async function seed() {
         `INSERT INTO external_contacts (id, owner_user_id, alias, email, phone_number, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $6)`,
         [c.id, c.owner, c.alias, c.email, c.phone, now],
+      );
+    }
+
+    // ── 3b. Contacts (relación usuario ↔ external_contact) ───────────────────
+    console.log('📇 Insertando contacts...');
+
+    for (const c of contacts) {
+      await qr.query(
+        `INSERT INTO contacts (id, owner_user_id, user_id, external_contact_id, created_at, updated_at)
+         VALUES ($1, $2, NULL, $3, $4, $4)`,
+        [uuidv4(), c.owner, c.id, now],
       );
     }
 
@@ -299,48 +305,9 @@ async function seed() {
     for (const p of parts) {
       await qr.query(
         `INSERT INTO activity_participations
-           (id, activity_id, user_id, external_contact_id, alias, role, status, joined_at, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
-        [uuidv4(), p.actId, p.userId, p.extId, p.alias, p.role, p.status, p.joinedAt, now],
-      );
-    }
-
-    // ── 7. Invitaciones ────────────────────────────────────────────────────
-    console.log('📨 Insertando invitaciones...');
-
-    type Inv = {
-      actId: string;
-      invitedBy: string;
-      userId: string | null;
-      extId: string | null;
-      email: string;
-      status: string;
-      respondedAt: Date | null;
-    };
-
-    const invitations: Inv[] = [
-      // Pendientes
-      { actId: A.paddle,   invitedBy: U.ana,    userId: null,    extId: EC.tomas,   email: 'tomas.rios@gmail.com', status: 'pending',  respondedAt: null },
-      { actId: A.basket,   invitedBy: U.diego,  userId: null,    extId: EC.laura,   email: 'laura.vega@gmail.com', status: 'pending',  respondedAt: null },
-      { actId: A.running,  invitedBy: U.sofia,  userId: U.carlos, extId: null,      email: 'carlos@klupni.com',    status: 'pending',  respondedAt: null },
-      { actId: A.tenisInd, invitedBy: U.carlos, userId: null,    extId: EC.valeria, email: 'valeria@gmail.com',    status: 'pending',  respondedAt: null },
-      { actId: A.futbol7,  invitedBy: U.pablo,  userId: U.ana,   extId: null,       email: 'ana@klupni.com',       status: 'pending',  respondedAt: null },
-      // Aceptadas
-      { actId: A.paddle,   invitedBy: U.ana,    userId: U.carlos, extId: null, email: 'carlos@klupni.com', status: 'accepted', respondedAt: daysAgo(3) },
-      { actId: A.basket,   invitedBy: U.diego,  userId: U.pablo,  extId: null, email: 'pablo@klupni.com',  status: 'accepted', respondedAt: daysAgo(2) },
-      { actId: A.basket,   invitedBy: U.diego,  userId: U.maria,  extId: null, email: 'maria@klupni.com',  status: 'accepted', respondedAt: daysAgo(1) },
-      { actId: A.running,  invitedBy: U.sofia,  userId: U.ana,    extId: null, email: 'ana@klupni.com',    status: 'accepted', respondedAt: daysAgo(2) },
-      { actId: A.futbol7,  invitedBy: U.pablo,  userId: U.sofia,  extId: null, email: 'sofia@klupni.com',  status: 'accepted', respondedAt: daysAgo(4) },
-      // Cancelada
-      { actId: A.paddle,   invitedBy: U.ana,    userId: U.diego,  extId: null, email: 'diego@klupni.com',  status: 'cancelled', respondedAt: null },
-    ];
-
-    for (const inv of invitations) {
-      await qr.query(
-        `INSERT INTO activity_invitations
-           (id, activity_id, invited_by_user_id, user_id, external_contact_id, email, token, status, expires_at, responded_at, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
-        [uuidv4(), inv.actId, inv.invitedBy, inv.userId, inv.extId, inv.email, uuidv4(), inv.status, hoursFromNow(48), inv.respondedAt, now],
+           (id, activity_id, user_id, external_contact_id, alias, role, status, joined_at, confirmed_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
+        [uuidv4(), p.actId, p.userId, p.extId, p.alias, p.role, p.status, p.joinedAt, p.role === 'host' || p.userId || p.alias ? p.joinedAt : null, now],
       );
     }
 
@@ -356,12 +323,10 @@ async function seed() {
     console.log('📊 Resumen:');
     console.log('   • 6 usuarios verificados con perfiles completos');
     console.log('   • 5 external contacts distribuidos entre usuarios');
+    console.log('   • 5 contacts (relación usuario ↔ external contact)');
     console.log('   • 3 actividades pasadas (completed)');
     console.log('   • 5 actividades próximas (open)');
     console.log('   • 26 participaciones activas');
-    console.log('   • 5 invitaciones pendientes');
-    console.log('   • 5 invitaciones aceptadas');
-    console.log('   • 1 invitación cancelada');
 
   } catch (err) {
     await qr.rollbackTransaction();

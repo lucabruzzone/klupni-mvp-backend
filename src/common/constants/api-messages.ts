@@ -24,7 +24,7 @@ export const ApiMessages: Record<ApiCode, string> = {
   LOGOUT_SUCCESS: 'Logged out successfully',
   USER_INFO_RETRIEVED: 'User info retrieved',
   USER_PROFILE_RETRIEVED: 'User profile retrieved',
-  USERNAME_AVAILABLE: 'Username is available',
+  USERNAME_CHECK_RESULT: 'Username availability check completed',
   USERS_SEARCH_SUCCESS: 'Users search completed',
   USER_PUBLIC_PROFILE_RETRIEVED: 'Public profile retrieved',
   USER_PROFILE_UPDATED: 'Profile updated successfully',
@@ -82,6 +82,10 @@ export const ApiMessages: Record<ApiCode, string> = {
   NOT_ACTIVE_PARTICIPANT: 'You are not an active participant in this activity',
   CANNOT_REMOVE_SOLE_HOST:
     'You are the only host, assign another host before leaving',
+  USER_ALREADY_PARTICIPANT:
+    'This user is already an active participant in this activity',
+  EXTERNAL_CONTACT_ALREADY_PARTICIPANT:
+    'This external contact is already an active participant in this activity',
 
   // External contacts success
   EXTERNAL_CONTACT_CREATED: 'External contact created',
@@ -93,6 +97,21 @@ export const ApiMessages: Record<ApiCode, string> = {
   // External contacts errors
   EXTERNAL_CONTACT_NOT_FOUND:
     'External contact not found or does not belong to you',
+
+  // Contacts success
+  CONTACT_ADDED: 'Contact added successfully',
+  CONTACT_LIST_RETRIEVED: 'Contacts list retrieved',
+  CONTACT_REMOVED: 'Contact removed successfully',
+  CONTACT_BATCH_REMOVED: 'Contacts removed successfully',
+
+  // Contacts errors
+  CONTACT_USER_OR_EXTERNAL_REQUIRED:
+    'Either userId or externalContactId must be provided',
+  CONTACT_BOTH_PROVIDED:
+    'Only one of userId or externalContactId can be provided',
+  CONTACT_CANNOT_ADD_SELF: 'You cannot add yourself as a contact',
+  CONTACT_ALREADY_ADDED: 'This contact is already in your list',
+  CONTACT_NOT_FOUND: 'Contact not found',
 
   // Invitations success
   INVITATION_CREATED: 'Invitation sent',

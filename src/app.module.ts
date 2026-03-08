@@ -7,6 +7,7 @@ import jwtConfig from './config/jwt.config';
 import mailConfig from './config/mail.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { ActivitiesModule } from './modules/activities/activities.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
 import { ExternalContactsModule } from './modules/external-contacts/external-contacts.module';
 import { ParticipationsModule } from './modules/participations/participations.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
@@ -58,6 +59,7 @@ import { MailModule } from './modules/mail/mail.module';
     }),
     AuthModule,
     ActivitiesModule,
+    ContactsModule,
     ExternalContactsModule,
     ParticipationsModule,
     InvitationsModule,

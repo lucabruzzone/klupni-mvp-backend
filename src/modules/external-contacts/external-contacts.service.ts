@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ApiCodes } from '../../common/constants/api-codes';
 import { paginate } from '../../common/dto/pagination-query.dto';
 import { ApiException } from '../../common/exceptions/api.exception';
+import { ContactsService } from '../contacts/contacts.service';
 import { User } from '../auth/entities/user.entity';
 import { ExternalContact } from './entities/external-contact.entity';
 import { CreateExternalContactDto } from './dto/create-external-contact.dto';
@@ -15,6 +16,7 @@ export class ExternalContactsService {
   constructor(
     @InjectRepository(ExternalContact)
     private readonly externalContactRepository: Repository<ExternalContact>,
+    private readonly contactsService: ContactsService,
   ) {}
 
   async create(dto: CreateExternalContactDto, user: User) {
@@ -26,6 +28,8 @@ export class ExternalContactsService {
     });
 
     const saved = await this.externalContactRepository.save(contact);
+
+    await this.contactsService.createContactForExternal(user.id, saved.id);
 
     return {
       id: saved.id,

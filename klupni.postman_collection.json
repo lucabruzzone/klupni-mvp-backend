@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Klupni MVP",
-    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nAll responses use the envelope format: `{ success, code, message, data, meta }`. Payload is in `data`; paginated responses include `meta`.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: populated automatically after getting activity details\n- `externalContactId`: populated automatically after creating a contact\n- `invitationId`: populated automatically after sending an invitation",
+    "description": "API collection for Klupni MVP backend. Base URL and access token are managed via collection variables.\n\nAll responses use the envelope format: `{ success, code, message, data, meta }`. Payload is in `data`; paginated responses include `meta`.\n\nVariables:\n- `baseUrl`: http://localhost:3000\n- `accessToken`: populated automatically after login\n- `activityId`: populated automatically after creating an activity\n- `participationId`: populated automatically after getting activity details\n- `externalContactId`: populated automatically after creating an external contact\n- `contactId`: set manually from list contacts response\n- `invitationId`: populated automatically after sending an invitation",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -37,6 +37,11 @@
     },
     {
       "key": "invitationToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "contactId",
       "value": "",
       "type": "string"
     }
@@ -179,7 +184,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}",
+              "raw": "{\n  \"email\": \"ana@klupni.com\",\n  \"password\": \"Password123\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "Login with email and password. The email must be verified first.\n\nResponds 200 with `{ accessToken, user }` and sets an HttpOnly cookie `refresh_token`.\n\nThe test script automatically saves `accessToken` to the collection variable."
@@ -250,7 +255,7 @@
                 { "key": "excludeUserId", "value": "", "description": "Optional: exclude this user ID (e.g. when updating own profile)" }
               ]
             },
-            "description": "Check if a username is available. **Public** endpoint.\n\nQuery params:\n- `username` (required): 3-30 chars, letters, numbers, underscores only\n- `excludeUserId` (optional): when updating profile, pass current user ID to exclude own username\n\nResponds 200 with `{ available: boolean }`.\nResponds 400 if username format is invalid."
+            "description": "Check if a username is available. **Public** endpoint.\n\nQuery params:\n- `username` (required): 3-30 chars, letters, numbers, underscores only\n- `excludeUserId` (optional): when updating profile, pass current user ID to exclude own username\n\nResponds 200 with envelope. `data.available` (boolean) indicates availability. Code: `USERNAME_CHECK_RESULT`.\nResponds 400 if username format is invalid."
           },
           "response": []
         },
@@ -459,12 +464,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "activities", "{{activityId}}", "participants"],
               "query": [
-                { "key": "status", "value": "all", "description": "Filter: 'confirmed' | 'pending' | 'all'. Default: 'all'" },
+                { "key": "status", "value": "all", "description": "Filter: 'confirmed' | 'unconfirmed' | 'all'. Default: 'all'" },
                 { "key": "page", "value": "1", "description": "Page number (default: 1)" },
                 { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
               ]
             },
-            "description": "List participants of an activity with minimal info (for UI cards/avatars).\n\n**Query params:**\n- `status=all` (default): confirmed participants + pending invitations\n- `status=confirmed`: only active participants\n- `status=pending`: only pending invitations\n\nEach item includes: `type` (user/external_contact/free/invited), `displayName`, `avatarUrl`, `role`, `status`, `participationId`, `invitationId`, `userId`, `externalContactId`.\n\nUse `userId` or `externalContactId` from the response to fetch detailed profiles via the dedicated endpoints."
+            "description": "List participants of an activity from activity_participations only. Pending invitations are listed in GET /activities/:activityId/invitations.\n\n**Query params:**\n- `status=all` (default): all participants\n- `status=confirmed`: only participants with confirmed_at set\n- `status=unconfirmed`: only participants with confirmed_at null\n\nEach item includes: `type` (user/external_contact/free), `participationId`, `role`, `status` (active | removed | left), `confirmedAt` (ISO date when confirmed, null if not), `hasPendingInvitation`, `displayName`, `avatarUrl`, `userId`, `externalContactId`.\n\nUse `userId` or `externalContactId` to fetch detailed profiles via the dedicated endpoints."
           },
           "response": []
         },
@@ -511,6 +516,28 @@
     {
       "name": "Participations",
       "item": [
+        {
+          "name": "Add Participant",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/{{activityId}}/participations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "activities", "{{activityId}}", "participations"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_UUID_HERE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add a participant (user or external contact) without sending an invitation. Participant remains unconfirmed (confirmed_at null) until they confirm.\n\nExactly one of userId or externalContactId must be provided.\n- userId: registered app user (cannot add yourself)\n- externalContactId: must belong to you\n\nResponds 201 with participation data including confirmedAt: null."
+          },
+          "response": []
+        },
         {
           "name": "Add Free Participant",
           "request": {
@@ -590,6 +617,92 @@
       ]
     },
     {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "Add Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "contacts"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_UUID_HERE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add a contact to the unified list. Exactly one of `userId` or `externalContactId` must be provided.\n\n- `userId`: registered app user (cannot add yourself)\n- `externalContactId`: must belong to you (owner_user_id)\n\nResponds 201 with envelope. Code: `CONTACT_ADDED`."
+          },
+          "response": []
+        },
+        {
+          "name": "List Contacts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/contacts?type=all&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "contacts"],
+              "query": [
+                { "key": "type", "value": "all", "description": "Filter: 'user' | 'external_contact' | 'all' (default: all)" },
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "List unified contacts (app users + external contacts). Paginated.\n\nQuery params:\n- `type`: 'user' | 'external_contact' | 'all' (default: all)\n- `page`, `limit`\n\nResponds 200 with envelope. Code: `CONTACT_LIST_RETRIEVED`."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Contacts Batch",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/contacts/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "contacts", "batch"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"CONTACT_UUID_1\", \"CONTACT_UUID_2\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Remove multiple contacts from the list (soft delete). Requires auth.\n\nBody: `{ ids: string[] }` (1-50 UUIDs). Only contacts that belong to you are deleted; others are ignored.\n\nResponds 200 with envelope. Code: `CONTACT_BATCH_REMOVED`. Data: `{ deletedCount: number }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/contacts/{{contactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "contacts", "{{contactId}}"]
+            },
+            "description": "Remove a contact from the list (soft delete). Requires auth.\n\nResponds 200 with envelope. Code: `CONTACT_REMOVED`.\nResponds 404 if contact not found."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "External Contacts",
       "item": [
         {
@@ -646,7 +759,7 @@
               "raw": "{\n  \"alias\": \"Juan Pérez\",\n  \"email\": \"juan@example.com\",\n  \"phoneNumber\": \"+56912345678\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Create a standalone external contact (not tied to any activity).\n\nRequired fields:\n- `alias` (string, 1-100 chars)\n\nOptional fields:\n- `email` (valid email)\n- `phoneNumber` (string, max 30 chars)\n\nResponds 201 with `{ id, alias, email, phoneNumber, createdAt }`.\n\nThe test script saves `externalContactId` to the collection variable for use in invitation endpoints."
+            "description": "Create a standalone external contact (not tied to any activity). Automatically adds it to the unified contacts list.\n\nRequired fields:\n- `alias` (string, 1-100 chars)\n\nOptional fields:\n- `email` (valid email)\n- `phoneNumber` (string, max 30 chars)\n\nResponds 201 with envelope. `data` contains `{ id, alias, email, phoneNumber, createdAt }`.\n\nThe test script saves `externalContactId` to the collection variable for use in invitation endpoints."
           },
           "response": []
         },

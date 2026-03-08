@@ -11,7 +11,7 @@ export class CreateActivitiesTables1771920295986 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_dac578254ee6df62b6acc6e630" ON "activities" ("start_at") `);
         await queryRunner.query(`CREATE INDEX "IDX_146a66975e0a017af25c63c665" ON "activities" ("status") `);
         await queryRunner.query(`CREATE INDEX "IDX_428d9025ae9ccdf2af6eaa1c7f" ON "activities" ("deleted_at") `);
-        await queryRunner.query(`CREATE TABLE "activity_participations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "activity_id" uuid NOT NULL, "user_id" uuid, "external_contact_id" uuid, "alias" text, "role" text NOT NULL, "status" text NOT NULL, "joined_at" TIMESTAMP NOT NULL, "deleted_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_activity_participations_id" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "activity_participations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "activity_id" uuid NOT NULL, "user_id" uuid, "external_contact_id" uuid, "alias" text, "role" text NOT NULL, "status" text NOT NULL, "joined_at" TIMESTAMP NOT NULL, "confirmed_at" TIMESTAMP, "deleted_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_activity_participations_id" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_c33cdc666e7b4c0ae07b5c8f8e" ON "activity_participations" ("activity_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_67c22634c6602fc1b02ca75650" ON "activity_participations" ("user_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_7fbafac3d567a57443e61811e9" ON "activity_participations" ("external_contact_id") `);

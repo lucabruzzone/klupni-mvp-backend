@@ -15,9 +15,10 @@ Documentación completa de la API REST de Klupni para desarrolladores frontend.
 7. [Usuarios](#7-usuarios)
 8. [Actividades](#8-actividades)
 9. [Participaciones](#9-participaciones)
-10. [Contactos externos](#10-contactos-externos)
-11. [Invitaciones](#11-invitaciones)
-12. [Catálogo de códigos API](#12-catálogo-de-códigos-api)
+10. [Contactos](#10-contactos)
+11. [Contactos externos](#11-contactos-externos)
+12. [Invitaciones](#12-invitaciones)
+13. [Catálogo de códigos API](#13-catálogo-de-códigos-api)
 
 ---
 
@@ -456,8 +457,8 @@ Verifica si un username está disponible. **Público.**
 ```json
 {
   "success": true,
-  "code": "USERNAME_AVAILABLE",
-  "message": "Username is available",
+  "code": "USERNAME_CHECK_RESULT",
+  "message": "Username availability check completed",
   "data": {
     "available": true
   },
@@ -682,8 +683,10 @@ Detalle de una actividad. **Requiere auth.**
 Lista participantes de una actividad. **Requiere auth.**
 
 **Query params:**
-- `status`: `'confirmed'` | `'pending'` | `'all'` (default: `all`)
+- `status`: `'confirmed'` | `'unconfirmed'` | `'all'` (default: `all`) — filtra por `confirmed_at`
 - `page`, `limit` (paginación)
+
+Lista solo participantes de `activity_participations`. Las invitaciones pendientes se consultan en `GET /api/activities/:activityId/invitations`.
 
 **Response 200:**
 ```json
@@ -693,11 +696,12 @@ Lista participantes de una actividad. **Requiere auth.**
   "message": "Participants list retrieved",
   "data": [
     {
-      "type": "user | external_contact | free | invited",
-      "participationId": "uuid | null",
-      "invitationId": "uuid | null",
-      "role": "host | participant | null",
-      "status": "string",
+      "type": "user | external_contact | free",
+      "participationId": "uuid",
+      "role": "host | participant",
+      "status": "active | removed | left",
+      "confirmedAt": "string | null",
+      "hasPendingInvitation": "boolean",
       "displayName": "string | null",
       "avatarUrl": "string | null",
       "userId": "uuid | null",
@@ -809,6 +813,50 @@ Agrega un participante libre (solo alias, sin user ni external contact). **Requi
 
 ---
 
+### `POST /api/activities/:activityId/participations`
+
+Agrega un participante (usuario o contacto externo) sin enviar invitación. El participante queda con `confirmed_at` en null hasta que confirme. **Requiere auth.** Solo host.
+
+**Request:** exactamente uno de:
+```json
+{
+  "userId": "uuid"
+}
+```
+o
+```json
+{
+  "externalContactId": "uuid"
+}
+```
+- `userId`: usuario registrado (no puede ser el propio host)
+- `externalContactId`: contacto externo que debe pertenecer al host
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "code": "PARTICIPANT_ADDED",
+  "message": "Participant added successfully",
+  "data": {
+    "id": "uuid",
+    "activityId": "uuid",
+    "userId": "uuid | null",
+    "externalContactId": "uuid | null",
+    "role": "participant",
+    "status": "active",
+    "joinedAt": "string",
+    "confirmedAt": null,
+    "createdAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Códigos de error:** `INVITATION_USER_OR_CONTACT_REQUIRED`, `INVITATION_BOTH_PROVIDED`, `INVITATION_CANNOT_INVITE_SELF`, `USER_ALREADY_PARTICIPANT`, `EXTERNAL_CONTACT_ALREADY_PARTICIPANT`, `ACTIVITY_FULL`, `USER_NOT_FOUND`, `EXTERNAL_CONTACT_NOT_FOUND`, `ACTIVITY_MODIFY_FORBIDDEN`.
+
+---
+
 ### `PATCH /api/activities/:activityId/participations/:participationId/role`
 
 Cambia el rol de un participante. **Requiere auth.** Solo host.
@@ -891,7 +939,135 @@ Solo si no eres el único host.
 
 ---
 
-## 10. Contactos externos
+## 10. Contactos
+
+Lista unificada de contactos del usuario (usuarios de la app y contactos externos). Al crear un external contact, se agrega automáticamente a esta lista.
+
+### `POST /api/contacts`
+
+Agrega un contacto a la lista. **Requiere auth.**
+
+**Request:** exactamente uno de:
+```json
+{
+  "userId": "uuid"
+}
+```
+o
+```json
+{
+  "externalContactId": "uuid"
+}
+```
+- `userId`: usuario registrado de la app (no puede ser el propio usuario)
+- `externalContactId`: contacto externo que debe pertenecer al usuario (`owner_user_id`)
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "code": "CONTACT_ADDED",
+  "message": "Contact added successfully",
+  "data": {
+    "id": "uuid",
+    "type": "user | external_contact",
+    "userId": "uuid | null",
+    "externalContactId": "uuid | null",
+    "displayName": "string | null",
+    "email": "string | null",
+    "createdAt": "string"
+  },
+  "meta": null
+}
+```
+
+**Códigos de error:** `CONTACT_USER_OR_EXTERNAL_REQUIRED`, `CONTACT_BOTH_PROVIDED`, `CONTACT_CANNOT_ADD_SELF`, `CONTACT_ALREADY_ADDED`, `USER_NOT_FOUND`, `EXTERNAL_CONTACT_NOT_FOUND`.
+
+---
+
+### `GET /api/contacts`
+
+Lista contactos del usuario. **Requiere auth.**
+
+**Query params:**
+- `type`: `'user'` | `'external_contact'` | `'all'` (default: `all`)
+- `page`, `limit` (paginación)
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "CONTACT_LIST_RETRIEVED",
+  "message": "Contacts list retrieved",
+  "data": [
+    {
+      "id": "uuid",
+      "type": "user | external_contact",
+      "userId": "uuid | null",
+      "externalContactId": "uuid | null",
+      "displayName": "string | null",
+      "email": "string | null",
+      "createdAt": "string"
+    }
+  ],
+  "meta": {
+    "total": 10,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
+### `DELETE /api/contacts/batch`
+
+Elimina múltiples contactos de la lista (soft delete). **Requiere auth.**
+
+**Request:**
+```json
+{
+  "ids": ["uuid", "uuid"]
+}
+```
+- `ids`: array de UUIDs de contactos (1-50). Solo se eliminan los que pertenecen al usuario; los que no existen o no son tuyos se ignoran.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "CONTACT_BATCH_REMOVED",
+  "message": "Contacts removed successfully",
+  "data": {
+    "deletedCount": 2
+  },
+  "meta": null
+}
+```
+
+---
+
+### `DELETE /api/contacts/:id`
+
+Elimina un contacto de la lista (soft delete). **Requiere auth.**
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "CONTACT_REMOVED",
+  "message": "Contact removed successfully",
+  "data": null,
+  "meta": null
+}
+```
+
+**Response 404:** `CONTACT_NOT_FOUND` — contacto no encontrado o no te pertenece.
+
+---
+
+## 11. Contactos externos
 
 ### `GET /api/external-contacts`
 
@@ -957,6 +1133,7 @@ Crea un contacto externo. **Requiere auth.**
   "meta": null
 }
 ```
+El contacto se agrega automáticamente a la lista de contactos (`/api/contacts`).
 
 ---
 
@@ -1033,7 +1210,7 @@ Elimina un contacto externo (soft delete). Solo propietario. **Requiere auth.**
 
 ---
 
-## 11. Invitaciones
+## 12. Invitaciones
 
 ### `POST /api/activities/:activityId/invitations`
 
@@ -1308,7 +1485,7 @@ Acepta una invitación. Usado desde el link del email. **Público.**
 
 ---
 
-## 12. Catálogo de códigos API
+## 13. Catálogo de códigos API
 
 Referencia de todos los códigos que puede devolver la API. El frontend puede usarlos para lógica condicional (ej. `if (response.code === 'USERNAME_TAKEN')`).
 
@@ -1324,7 +1501,7 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 ### Auth
 | Código | Tipo |
 |--------|------|
-| `USER_REGISTERED`, `EMAIL_VERIFIED`, `VERIFICATION_EMAIL_SENT`, `PASSWORD_RESET_EMAIL_SENT`, `PASSWORD_RESET`, `LOGIN_SUCCESS`, `REFRESH_SUCCESS`, `LOGOUT_SUCCESS`, `USER_INFO_RETRIEVED`, `USER_PROFILE_RETRIEVED`, `USERNAME_AVAILABLE`, `USERS_SEARCH_SUCCESS`, `USER_PUBLIC_PROFILE_RETRIEVED`, `USER_PROFILE_UPDATED` | éxito |
+| `USER_REGISTERED`, `EMAIL_VERIFIED`, `VERIFICATION_EMAIL_SENT`, `PASSWORD_RESET_EMAIL_SENT`, `PASSWORD_RESET`, `LOGIN_SUCCESS`, `REFRESH_SUCCESS`, `LOGOUT_SUCCESS`, `USER_INFO_RETRIEVED`, `USER_PROFILE_RETRIEVED`, `USERNAME_CHECK_RESULT`, `USERS_SEARCH_SUCCESS`, `USER_PUBLIC_PROFILE_RETRIEVED`, `USER_PROFILE_UPDATED` | éxito |
 | `EMAIL_ALREADY_IN_USE`, `INVALID_VERIFICATION_TOKEN`, `VERIFICATION_TOKEN_ALREADY_USED`, `VERIFICATION_TOKEN_EXPIRED`, `EMAIL_ALREADY_VERIFIED`, `INVALID_RESET_TOKEN`, `RESET_TOKEN_ALREADY_USED`, `RESET_TOKEN_EXPIRED`, `INVALID_CREDENTIALS`, `EMAIL_NOT_VERIFIED`, `REFRESH_TOKEN_NOT_FOUND`, `REFRESH_TOKEN_INVALID`, `USER_NOT_FOUND`, `USERNAME_INVALID_LENGTH`, `USERNAME_INVALID_CHARS`, `USERNAME_TAKEN`, `SEARCH_QUERY_TOO_SHORT` | error |
 
 ### Actividades
@@ -1338,6 +1515,12 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 |--------|------|
 | `PARTICIPANT_ADDED`, `PARTICIPANT_ROLE_UPDATED`, `PARTICIPANT_REMOVED`, `ACTIVITY_LEFT` | éxito |
 | `ACTIVITY_FULL`, `PARTICIPATION_NOT_FOUND`, `ACTIVE_PARTICIPATION_NOT_FOUND`, `CANNOT_CHANGE_OWN_ROLE`, `ONLY_REGISTERED_CAN_BE_HOST`, `CANNOT_REMOVE_HOST`, `NOT_ACTIVE_PARTICIPANT`, `CANNOT_REMOVE_SOLE_HOST` | error |
+
+### Contactos (lista unificada)
+| Código | Tipo |
+|--------|------|
+| `CONTACT_ADDED`, `CONTACT_LIST_RETRIEVED`, `CONTACT_REMOVED`, `CONTACT_BATCH_REMOVED` | éxito |
+| `CONTACT_USER_OR_EXTERNAL_REQUIRED`, `CONTACT_BOTH_PROVIDED`, `CONTACT_CANNOT_ADD_SELF`, `CONTACT_ALREADY_ADDED`, `CONTACT_NOT_FOUND` | error |
 
 ### Contactos externos
 | Código | Tipo |
@@ -1377,11 +1560,16 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 | GET | `/activities/:id/participants` | ✓ | Listar participantes |
 | PATCH | `/activities/:id` | ✓ | Actualizar actividad |
 | DELETE | `/activities/:id` | ✓ | Eliminar actividad |
+| POST | `/activities/:activityId/participations` | ✓ | Agregar participante (sin invitación) |
 | POST | `/activities/:activityId/participations/free` | ✓ | Agregar participante libre |
 | PATCH | `/activities/:activityId/participations/:id/role` | ✓ | Cambiar rol |
 | PATCH | `/activities/:activityId/participations/:id/remove` | ✓ | Eliminar participante |
 | DELETE | `/activities/:activityId/participations/me` | ✓ | Abandonar actividad |
-| GET | `/external-contacts` | ✓ | Listar contactos |
+| POST | `/contacts` | ✓ | Agregar contacto |
+| GET | `/contacts` | ✓ | Listar contactos |
+| DELETE | `/contacts/batch` | ✓ | Eliminar contactos en batch |
+| DELETE | `/contacts/:id` | ✓ | Eliminar contacto |
+| GET | `/external-contacts` | ✓ | Listar contactos externos |
 | POST | `/external-contacts` | ✓ | Crear contacto |
 | GET | `/external-contacts/:id` | ✓ | Obtener contacto |
 | PATCH | `/external-contacts/:id` | ✓ | Actualizar contacto |
