@@ -4,7 +4,7 @@ export class CreateAuthTables1771904429155 implements MigrationInterface {
     name = 'CreateAuthTables1771904429155'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "email" text NOT NULL, "password_hash" text NOT NULL, "email_verified_at" TIMESTAMP, "deleted_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_users_email" UNIQUE ("email"), CONSTRAINT "PK_users_id" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "email" text NOT NULL, "email_verified_at" TIMESTAMP, "deleted_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_users_email" UNIQUE ("email"), CONSTRAINT "PK_users_id" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_users_deleted_at" ON "users" ("deleted_at")`);
         await queryRunner.query(`CREATE TABLE "user_profiles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "first_name" text, "last_name" text, "username" text, "avatar_url" text, "deleted_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_user_profiles_username" UNIQUE ("username"), CONSTRAINT "UQ_user_profiles_user_id" UNIQUE ("user_id"), CONSTRAINT "PK_user_profiles_id" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_user_profiles_user_id" ON "user_profiles" ("user_id")`);
@@ -13,11 +13,25 @@ export class CreateAuthTables1771904429155 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_email_verification_tokens_user_id" ON "email_verification_tokens" ("user_id")`);
         await queryRunner.query(`CREATE INDEX "IDX_email_verification_tokens_token" ON "email_verification_tokens" ("token")`);
         await queryRunner.query(`CREATE INDEX "IDX_email_verification_tokens_expires_at" ON "email_verification_tokens" ("expires_at")`);
+        await queryRunner.query(`CREATE TABLE "user_auth_providers" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "provider" text NOT NULL, "provider_user_id" text NOT NULL, "email" text, "password_hash" text, "access_token" text, "refresh_token" text, "token_expires_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_provider_provider_user_id" UNIQUE ("provider", "provider_user_id"), CONSTRAINT "PK_user_auth_providers_id" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_user_auth_providers_user_id" ON "user_auth_providers" ("user_id")`);
+        await queryRunner.query(`CREATE TABLE "user_sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "auth_provider_id" uuid, "session_token" text NOT NULL, "user_agent" text, "ip_address" text, "last_active_at" TIMESTAMP NOT NULL DEFAULT now(), "expires_at" TIMESTAMP NOT NULL, "revoked_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_user_sessions_session_token" UNIQUE ("session_token"), CONSTRAINT "PK_user_sessions_id" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_user_sessions_user_id" ON "user_sessions" ("user_id")`);
+        await queryRunner.query(`CREATE INDEX "IDX_user_sessions_token" ON "user_sessions" ("session_token")`);
+        await queryRunner.query(`CREATE INDEX "IDX_user_sessions_expires_at" ON "user_sessions" ("expires_at")`);
+        await queryRunner.query(`ALTER TABLE "user_auth_providers" ADD CONSTRAINT "FK_user_auth_providers_user_id" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "user_sessions" ADD CONSTRAINT "FK_user_sessions_user_id" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "user_sessions" ADD CONSTRAINT "FK_user_sessions_auth_provider_id" FOREIGN KEY ("auth_provider_id") REFERENCES "user_auth_providers"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "user_profiles" ADD CONSTRAINT "FK_user_profiles_user_id" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "email_verification_tokens" ADD CONSTRAINT "FK_email_verification_tokens_user_id" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "user_sessions" DROP CONSTRAINT "FK_user_sessions_auth_provider_id"`);
+        await queryRunner.query(`ALTER TABLE "user_sessions" DROP CONSTRAINT "FK_user_sessions_user_id"`);
+        await queryRunner.query(`ALTER TABLE "user_auth_providers" DROP CONSTRAINT "FK_user_auth_providers_user_id"`);
+        await queryRunner.query(`DROP TABLE "user_sessions"`);
+        await queryRunner.query(`DROP TABLE "user_auth_providers"`);
         await queryRunner.query(`ALTER TABLE "email_verification_tokens" DROP CONSTRAINT "FK_email_verification_tokens_user_id"`);
         await queryRunner.query(`ALTER TABLE "user_profiles" DROP CONSTRAINT "FK_user_profiles_user_id"`);
         await queryRunner.query(`DROP TABLE "email_verification_tokens"`);

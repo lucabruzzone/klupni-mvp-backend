@@ -245,6 +245,74 @@
             "description": "Logout the authenticated user. Clears the `refresh_token` cookie.\n\nRequires a valid `Authorization: Bearer <accessToken>` header.\n\nResponds 200 with `{ message }`."
           },
           "response": []
+        },
+        {
+          "name": "Firebase Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.data.accessToken);",
+                  "  console.log('accessToken saved to collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/firebase",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "firebase"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"PASTE_FIREBASE_ID_TOKEN_HERE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Login con Firebase ID Token. **Público.**\n\nEl cliente debe autenticarse con Firebase (Google, Apple, etc.) en el frontend y enviar el ID Token aquí.\n\nRequest: `{ idToken: string }`\n\nResponds 200 con `{ accessToken, user }` y establece la cookie `refresh_token`. Mismo formato que login local.\n\nResponds 401 con `FIREBASE_TOKEN_INVALID` si el token es inválido o expirado.\n\nRequiere `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` configurados en el backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Linked Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/providers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "providers"]
+            },
+            "description": "Lista los providers de autenticación vinculados al usuario (local, google, etc.). **Requiere auth.**\n\nResponds 200 con `{ data: [{ provider, email }, ...] }`. Code: `OAUTH_PROVIDERS_RETRIEVED`."
+          },
+          "response": []
+        },
+        {
+          "name": "Unlink Provider",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/providers/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "providers", "google"]
+            },
+            "description": "Desvincula un provider del usuario. **Requiere auth.**\n\nPath param: `provider` (ej. `local`, `google`).\n\nNo se puede desvincular el único provider (400: `OAUTH_CANNOT_UNLINK_ONLY_PROVIDER`).\n\nResponds 200 con `{ data: { provider } }`. Code: `OAUTH_PROVIDER_UNLINKED`.\nResponds 404 si el provider no está vinculado: `OAUTH_PROVIDER_NOT_FOUND`."
+          },
+          "response": []
         }
       ]
     },

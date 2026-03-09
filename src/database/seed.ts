@@ -90,6 +90,8 @@ async function seed() {
         external_contacts,
         email_verification_tokens,
         password_reset_tokens,
+        user_sessions,
+        user_auth_providers,
         user_profiles,
         users
       RESTART IDENTITY CASCADE
@@ -112,9 +114,17 @@ async function seed() {
 
     for (const u of users) {
       await qr.query(
-        `INSERT INTO users (id, email, password_hash, email_verified_at, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $5)`,
-        [u.id, u.email, passwordHash, u.verified, now],
+        `INSERT INTO users (id, email, email_verified_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $4)`,
+        [u.id, u.email, u.verified, now],
+      );
+    }
+
+    for (const u of users) {
+      await qr.query(
+        `INSERT INTO user_auth_providers (id, user_id, provider, provider_user_id, email, password_hash, created_at, updated_at)
+         VALUES ($1, $2, 'local', $3, $3, $4, $5, $5)`,
+        [uuidv4(), u.id, u.email, passwordHash, now],
       );
     }
 

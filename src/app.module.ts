@@ -5,6 +5,7 @@ import * as Joi from 'joi';
 
 import jwtConfig from './config/jwt.config';
 import mailConfig from './config/mail.config';
+import firebaseConfig from './config/firebase.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { ActivitiesModule } from './modules/activities/activities.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
@@ -13,12 +14,13 @@ import { ParticipationsModule } from './modules/participations/participations.mo
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { ActivityTeamsModule } from './modules/activity-teams/activity-teams.module';
 import { MailModule } from './modules/mail/mail.module';
+import { FirebaseModule } from './modules/firebase/firebase.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [jwtConfig, mailConfig],
+      load: [jwtConfig, mailConfig, firebaseConfig],
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),
         NODE_ENV: Joi.string()
@@ -58,6 +60,7 @@ import { MailModule } from './modules/mail/mail.module';
         migrations: [__dirname + '/migrations/*.{ts,js}'],
       }),
     }),
+    FirebaseModule,
     AuthModule,
     ActivitiesModule,
     ContactsModule,

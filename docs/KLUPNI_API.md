@@ -40,9 +40,11 @@ Documentación completa de la API REST de Klupni para desarrolladores frontend.
 - **Refresh token**: se guarda en una cookie HttpOnly `refresh_token` (SameSite=strict, path=/).
 - Las peticiones autenticadas deben incluir `credentials: 'include'` en fetch para enviar cookies.
 
-**Endpoints públicos** (no requieren token): registro, login, refresh, verify-email, resend-verification, forgot-password, reset-password, invitations/preview, invitations/accept, users/check-username.
+**Endpoints públicos** (no requieren token): registro, login, refresh, auth/firebase, verify-email, resend-verification, forgot-password, reset-password, invitations/preview, invitations/accept, users/check-username.
 
 **Resto de endpoints**: requieren `Authorization: Bearer <accessToken>`.
+
+**Métodos de login**: email+contraseña (`POST /auth/login`) o Firebase Auth (`POST /auth/firebase` con ID Token de Google, Apple, etc.). Un usuario puede tener múltiples providers vinculados (account linking).
 
 ---
 
@@ -156,7 +158,7 @@ Registra un usuario. **Público.**
 ```
 - `password`: mínimo 8 caracteres
 
-**Response 201:**
+**Response 201 (registro nuevo o account linking con email no verificado):**
 ```json
 {
   "success": true,
@@ -166,6 +168,21 @@ Registra un usuario. **Público.**
     "id": "uuid",
     "email": "string",
     "message": "Check your email to verify your account"
+  },
+  "meta": null
+}
+```
+
+**Response 201 (account linking con email ya verificado, ej. usuario previo de Google):**
+```json
+{
+  "success": true,
+  "code": "LOCAL_PROVIDER_ADDED",
+  "message": "Local login added. You can now sign in with email and password.",
+  "data": {
+    "id": "uuid",
+    "email": "string",
+    "message": "Local login added. You can now sign in with email and password."
   },
   "meta": null
 }
@@ -351,6 +368,85 @@ Cierra sesión (limpia la cookie refresh). **Requiere auth.**
   "meta": null
 }
 ```
+
+---
+
+### `POST /api/auth/firebase`
+
+Login con Firebase ID Token. **Público.** El cliente se autentica con Firebase (Google, Apple, etc.) en el frontend y envía el ID Token al backend.
+
+**Request:**
+```json
+{
+  "idToken": "string"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "LOGIN_SUCCESS",
+  "message": "Logged in successfully",
+  "data": {
+    "accessToken": "string",
+    "user": {
+      "id": "uuid",
+      "email": "string",
+      "emailVerifiedAt": "string | null"
+    }
+  },
+  "meta": null
+}
+```
+El servidor envía la cookie `refresh_token` en la respuesta. Mismo formato que login local.
+
+**Response 401:** `FIREBASE_TOKEN_INVALID` — token inválido, expirado o sin email.
+
+**Variables de entorno requeridas:** `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`.
+
+---
+
+### `GET /api/auth/providers`
+
+Lista los providers de autenticación vinculados al usuario (local, google, etc.). **Requiere auth.**
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "OAUTH_PROVIDERS_RETRIEVED",
+  "message": "Linked providers retrieved",
+  "data": [
+    { "provider": "local", "email": "user@example.com" },
+    { "provider": "google", "email": "user@example.com" }
+  ],
+  "meta": null
+}
+```
+
+---
+
+### `DELETE /api/auth/providers/:provider`
+
+Desvincula un provider del usuario. **Requiere auth.**
+
+**Path params:** `provider` — nombre del provider (`local`, `google`, etc.)
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "code": "OAUTH_PROVIDER_UNLINKED",
+  "message": "Provider unlinked successfully",
+  "data": { "provider": "google" },
+  "meta": null
+}
+```
+
+**Response 400:** `OAUTH_CANNOT_UNLINK_ONLY_PROVIDER` — no se puede desvincular el único provider (el usuario quedaría sin forma de login).
+
+**Response 404:** `OAUTH_PROVIDER_NOT_FOUND` — el provider no está vinculado a la cuenta.
 
 ---
 
@@ -1760,8 +1856,8 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 ### Auth
 | Código | Tipo |
 |--------|------|
-| `USER_REGISTERED`, `EMAIL_VERIFIED`, `VERIFICATION_EMAIL_SENT`, `PASSWORD_RESET_EMAIL_SENT`, `PASSWORD_RESET`, `LOGIN_SUCCESS`, `REFRESH_SUCCESS`, `LOGOUT_SUCCESS`, `USER_INFO_RETRIEVED`, `USER_PROFILE_RETRIEVED`, `USERNAME_CHECK_RESULT`, `USERS_SEARCH_SUCCESS`, `USER_PUBLIC_PROFILE_RETRIEVED`, `USER_PROFILE_UPDATED` | éxito |
-| `EMAIL_ALREADY_IN_USE`, `INVALID_VERIFICATION_TOKEN`, `VERIFICATION_TOKEN_ALREADY_USED`, `VERIFICATION_TOKEN_EXPIRED`, `EMAIL_ALREADY_VERIFIED`, `INVALID_RESET_TOKEN`, `RESET_TOKEN_ALREADY_USED`, `RESET_TOKEN_EXPIRED`, `INVALID_CREDENTIALS`, `EMAIL_NOT_VERIFIED`, `REFRESH_TOKEN_NOT_FOUND`, `REFRESH_TOKEN_INVALID`, `USER_NOT_FOUND`, `USERNAME_INVALID_LENGTH`, `USERNAME_INVALID_CHARS`, `USERNAME_TAKEN`, `SEARCH_QUERY_TOO_SHORT` | error |
+| `USER_REGISTERED`, `LOCAL_PROVIDER_ADDED`, `EMAIL_VERIFIED`, `VERIFICATION_EMAIL_SENT`, `PASSWORD_RESET_EMAIL_SENT`, `PASSWORD_RESET`, `LOGIN_SUCCESS`, `REFRESH_SUCCESS`, `LOGOUT_SUCCESS`, `USER_INFO_RETRIEVED`, `USER_PROFILE_RETRIEVED`, `USERNAME_CHECK_RESULT`, `USERS_SEARCH_SUCCESS`, `USER_PUBLIC_PROFILE_RETRIEVED`, `USER_PROFILE_UPDATED`, `OAUTH_PROVIDERS_RETRIEVED`, `OAUTH_PROVIDER_UNLINKED` | éxito |
+| `EMAIL_ALREADY_IN_USE`, `INVALID_VERIFICATION_TOKEN`, `VERIFICATION_TOKEN_ALREADY_USED`, `VERIFICATION_TOKEN_EXPIRED`, `EMAIL_ALREADY_VERIFIED`, `INVALID_RESET_TOKEN`, `RESET_TOKEN_ALREADY_USED`, `RESET_TOKEN_EXPIRED`, `INVALID_CREDENTIALS`, `EMAIL_NOT_VERIFIED`, `REFRESH_TOKEN_NOT_FOUND`, `REFRESH_TOKEN_INVALID`, `FIREBASE_TOKEN_INVALID`, `USER_NOT_FOUND`, `USERNAME_INVALID_LENGTH`, `USERNAME_INVALID_CHARS`, `USERNAME_TAKEN`, `SEARCH_QUERY_TOO_SHORT`, `OAUTH_CANNOT_UNLINK_ONLY_PROVIDER`, `OAUTH_PROVIDER_NOT_FOUND` | error |
 
 ### Actividades
 | Código | Tipo |
@@ -1811,8 +1907,11 @@ Referencia de todos los códigos que puede devolver la API. El frontend puede us
 | POST | `/auth/forgot-password` | — | Solicitar reset password |
 | POST | `/auth/reset-password` | — | Resetear password |
 | POST | `/auth/login` | — | Login |
+| POST | `/auth/firebase` | — | Login con Firebase (Google, Apple, etc.) |
 | POST | `/auth/refresh` | — | Refresh token |
 | POST | `/auth/logout` | ✓ | Logout |
+| GET | `/auth/providers` | ✓ | Listar providers vinculados |
+| DELETE | `/auth/providers/:provider` | ✓ | Desvincular provider |
 | GET | `/users/me` | ✓ | Info usuario |
 | GET | `/users/profile` | ✓ | Perfil propio |
 | PATCH | `/users/profile` | ✓ | Actualizar perfil |

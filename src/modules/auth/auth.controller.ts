@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,6 +22,7 @@ import { ApiException } from '../../common/exceptions/api.exception';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { FirebaseAuthDto } from './dto/firebase-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -44,7 +46,8 @@ export class AuthController {
   @Post('auth/register')
   async register(@Body() dto: RegisterDto) {
     const result = await this.authService.register(dto);
-    return ResponseFactory.created(ApiCodes.USER_REGISTERED, result);
+    const { apiCode, ...data } = result;
+    return ResponseFactory.created(apiCode, data);
   }
 
   @Public()
@@ -76,6 +79,32 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     const result = await this.authService.resetPassword(dto);
     return ResponseFactory.ok(ApiCodes.PASSWORD_RESET, result);
+  }
+
+  @Public()
+  @Post('auth/firebase')
+  @HttpCode(HttpStatus.OK)
+  async firebaseAuth(
+    @Body() dto: FirebaseAuthDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.firebaseAuth(dto.idToken);
+
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: result.refreshCookieMaxAge,
+      path: '/',
+    });
+
+    return ResponseFactory.ok(ApiCodes.LOGIN_SUCCESS, {
+      accessToken: result.accessToken,
+      user: result.user,
+    });
   }
 
   @Public()
@@ -130,6 +159,22 @@ export class AuthController {
   async logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
     return ResponseFactory.ok(ApiCodes.LOGOUT_SUCCESS);
+  }
+
+  @Get('auth/providers')
+  async getProviders(@CurrentUser() user: User) {
+    const result = await this.authService.getLinkedProviders(user.id);
+    return ResponseFactory.ok(ApiCodes.OAUTH_PROVIDERS_RETRIEVED, result);
+  }
+
+  @Delete('auth/providers/:provider')
+  @HttpCode(HttpStatus.OK)
+  async unlinkProvider(
+    @CurrentUser() user: User,
+    @Param('provider') provider: string,
+  ) {
+    const result = await this.authService.unlinkProvider(user.id, provider);
+    return ResponseFactory.ok(ApiCodes.OAUTH_PROVIDER_UNLINKED, result);
   }
 
   // ── User endpoints ────────────────────────────────────────────────────────

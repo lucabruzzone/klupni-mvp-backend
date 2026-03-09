@@ -7,4 +7,5 @@ export default registerAs('mail', () => ({
   pass: process.env.MAIL_PASS,
   from: process.env.MAIL_FROM,
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  skipSend: process.env.MAIL_SKIP_SEND === 'true',
 }));

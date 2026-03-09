@@ -4,9 +4,12 @@ import {
   DeleteDateColumn,
   Entity,
   Index,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { UserAuthProvider } from './user-auth-provider.entity';
+import { UserSession } from './user-session.entity';
 
 @Entity('users')
 export class User {
@@ -15,9 +18,6 @@ export class User {
 
   @Column({ type: 'text', unique: true })
   email: string;
-
-  @Column({ name: 'password_hash', type: 'text' })
-  passwordHash: string;
 
   @Column({ name: 'email_verified_at', type: 'timestamp', nullable: true })
   emailVerifiedAt: Date | null;
@@ -31,4 +31,10 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
+
+  @OneToMany(() => UserAuthProvider, (provider) => provider.user)
+  authProviders: UserAuthProvider[];
+
+  @OneToMany(() => UserSession, (session) => session.user)
+  sessions: UserSession[];
 }

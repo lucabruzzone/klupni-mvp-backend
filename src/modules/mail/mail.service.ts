@@ -23,6 +23,16 @@ export class MailService {
     subject: string;
     html: string;
   }): Promise<void> {
+    const skipSend = this.configService.get<boolean>('mail.skipSend');
+
+    if (skipSend) {
+      const urlMatch = options.html.match(/href="([^"]+)"/);
+      const link = urlMatch ? urlMatch[1] : '(no link in email)';
+      this.logger.log(`[MAIL_SKIP_SEND] Would send to ${options.to}: ${options.subject}`);
+      this.logger.log(`[MAIL_SKIP_SEND] Link: ${link}`);
+      return;
+    }
+
     const from = this.configService.get<string>('mail.from');
     await this.transporter.sendMail({ from, ...options });
     this.logger.log(`Email sent to ${options.to}: ${options.subject}`);

@@ -13,6 +13,7 @@ export const ApiMessages: Record<ApiCode, string> = {
 
   // Auth success
   USER_REGISTERED: 'Check your email to verify your account',
+  LOCAL_PROVIDER_ADDED: 'Local login added. You can now sign in with email and password.',
   EMAIL_VERIFIED: 'Email verified successfully',
   VERIFICATION_EMAIL_SENT:
     'If an account exists with this email, a verification link has been sent',
@@ -42,12 +43,20 @@ export const ApiMessages: Record<ApiCode, string> = {
   EMAIL_NOT_VERIFIED: 'Please verify your email before logging in',
   REFRESH_TOKEN_NOT_FOUND: 'Refresh token not found',
   REFRESH_TOKEN_INVALID: 'Invalid or expired refresh token',
+  FIREBASE_TOKEN_INVALID: 'Invalid or expired Firebase token',
   USER_NOT_FOUND: 'User not found',
   USERNAME_INVALID_LENGTH: 'Username must be between 3 and 30 characters',
   USERNAME_INVALID_CHARS:
     'Username can only contain letters, numbers and underscores',
   USERNAME_TAKEN: 'This username is already taken',
   SEARCH_QUERY_TOO_SHORT: 'Search query must be at least 2 characters',
+
+  // OAuth
+  OAUTH_PROVIDERS_RETRIEVED: 'Linked providers retrieved',
+  OAUTH_PROVIDER_UNLINKED: 'Provider unlinked successfully',
+  OAUTH_CANNOT_UNLINK_ONLY_PROVIDER:
+    'Cannot unlink the only provider. Add another login method first.',
+  OAUTH_PROVIDER_NOT_FOUND: 'Provider not found or not linked to your account',
 
   // Activities success
   ACTIVITY_CREATED: 'Activity created successfully',
